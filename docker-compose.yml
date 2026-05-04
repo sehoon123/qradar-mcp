@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  qradar-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qradar-mcp-server
+    ports:
+      - "5001:5000"
+    environment:
+      # QRadar app framework requirements
+      - APP_ROOT=/opt/app-root/qradar-mcp
+      - QRADAR_CONSOLE_FQDN=https://${QRADAR_HOST}
+
+      # QRadar connection settings
+      - QRADAR_HOST=${QRADAR_HOST}
+
+      # Server settings
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount config for run local (optional)
+      - ./config.json:/opt/app-root/qradar-mcp/config.json:ro
+
+      # Mount logs directory
+      - ./logs:/opt/app-root/logs
+
+      # Mount source code for development (optional - comment out for production)
+      # - ./:/opt/app-root/qradar-mcp:ro
+    restart: unless-stopped
+    networks:
+      - qradar-mcp-network
+
+networks:
+  qradar-mcp-network:
+    name: qradar-mcp-network
+    driver: bridge

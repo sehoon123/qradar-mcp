@@ -1,0 +1,27 @@
+{
+  "verb_toggles": {
+    "GET": true,
+    "POST": false,
+    "DELETE": false
+  },
+  "group_toggles": {
+    "offense": true,
+    "ariel": false,
+    "reference_data": true,
+    "asset": true,
+    "log_source": true,
+    "analytics": true,
+    "system": true,
+    "config": true,
+    "services": false,
+    "forensics": true,
+    "qvm": true
+  },
+  "per_tool_toggles": {},
+  "resource_toggles": {
+    "aql_events_fields": false,
+    "aql_flows_fields": false,
+    "aql_functions": false,
+    "aql_generation_guide": false
+  }
+}
