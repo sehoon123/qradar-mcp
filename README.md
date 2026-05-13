@@ -1,4 +1,4 @@
-# IBM QRadar MCP Server - Offical
+# IBM QRadar MCP Server - Official
 
 An open-source Model Context Protocol (MCP) server implementation for IBM QRadar SIEM that enables AI agents to interact with QRadar SIEM data through standardized tools and protocols.
 
