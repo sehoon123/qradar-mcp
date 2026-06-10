@@ -343,7 +343,27 @@ def register_resources():
 register_resources()
 
 
+def get_server_bind_settings(config_data):
+    """Resolve uvicorn bind host and port from config and environment."""
+    server_config = config_data.get('server', {}) if config_data else {}
+    host = os.getenv('MCP_HOST') or server_config.get('host') or '0.0.0.0'
+    raw_port = os.getenv('MCP_PORT') or server_config.get('port') or 5000
+
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError):
+        log_structured(
+            "Invalid MCP server port, falling back to 5000",
+            level='WARNING',
+            configured_port=raw_port
+        )
+        port = 5000
+
+    return host, port
+
+
 if __name__ == "__main__":
     # For local development
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5002)
+    SERVER_HOST, SERVER_PORT = get_server_bind_settings(config)
+    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)
