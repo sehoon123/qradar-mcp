@@ -329,7 +329,11 @@ class TestRegisterAllTools:
                 "analytics": true,
                 "system": true,
                 "config": true,
+                "data_classification": true,
+                "health_data": true,
+                "help": true,
                 "services": true,
+                "composite": true,
                 "forensics": true,
                 "qvm": true
             },
@@ -357,7 +361,11 @@ class TestRegisterAllTools:
                 "analytics": true,
                 "system": true,
                 "config": true,
+                "data_classification": true,
+                "health_data": true,
+                "help": true,
                 "services": true,
+                "composite": true,
                 "forensics": true,
                 "qvm": false
             },
@@ -368,7 +376,7 @@ class TestRegisterAllTools:
         return FeatureToggleManager(str(config_file))
 
     def test_all_tools_registered_when_all_enabled(self, all_enabled_config):
-        """Test that all 60 tools are registered when all toggles are enabled."""
+        """Test that all 80 tools are registered when all toggles are enabled."""
         from qradar_mcp.tools.fastmcp_adapter import register_all_tools
 
         mock_mcp = Mock()
@@ -377,8 +385,8 @@ class TestRegisterAllTools:
 
         registered_tools, skipped_tools = register_all_tools(mock_mcp, all_enabled_config, mock_qradar_client)
 
-        # Should register all 60 tools
-        assert len(registered_tools) == 60
+        # Should register all 80 tools
+        assert len(registered_tools) == 80
         assert len(skipped_tools) == 0
 
     def test_returns_tuple(self, all_enabled_config):
@@ -409,7 +417,7 @@ class TestRegisterAllTools:
         # Should have some registered and some skipped
         assert len(registered_tools) > 0
         assert len(skipped_tools) > 0
-        assert len(registered_tools) + len(skipped_tools) == 60
+        assert len(registered_tools) + len(skipped_tools) == 80
 
     def test_delete_verb_disabled_skips_delete_tools(self, some_disabled_config):
         """Test that tools with DELETE verb are skipped when DELETE is disabled."""
@@ -481,8 +489,8 @@ class TestRegisterAllTools:
         # No overlap between registered and skipped
         assert len(registered_names & skipped_names) == 0
 
-        # All 60 tools accounted for
-        assert len(registered_names | skipped_names) == 60
+        # All 80 tools accounted for
+        assert len(registered_names | skipped_names) == 80
 
 
 if __name__ == "__main__":

@@ -205,6 +205,12 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
     from .ariel.get_saved_search import GetSavedSearchTool
     from .ariel.delete_saved_search import DeleteSavedSearchTool
     from .ariel.validate_aql import ValidateAQLTool
+    from .ariel.list_ariel_databases import ListArielDatabasesTool
+    from .ariel.list_ariel_functions import ListArielFunctionsTool
+    from .ariel.get_ariel_parser_keywords import GetArielParserKeywordsTool
+    from .ariel.get_ariel_database_columns import GetArielDatabaseColumnsTool
+    from .ariel.list_ariel_lookups import ListArielLookupsTool
+    from .ariel.get_ariel_lookup import GetArielLookupTool
 
     from .reference_data.list_reference_sets import ListReferenceSets
     from .reference_data.get_reference_set import GetReferenceSetTool
@@ -247,6 +253,20 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
 
     from .config.list_users import ListUsersTool
     from .config.list_user_roles import ListUserRolesTool
+    from .config.list_network_hierarchy import ListNetworkHierarchyTool
+    from .config.list_domains import ListDomainsTool
+    from .config.list_regex_properties import ListRegexPropertiesTool
+    from .config.list_calculated_properties import ListCalculatedPropertiesTool
+
+    from .data_classification.list_qid_records import ListQidRecordsTool
+    from .data_classification.get_qid_record import GetQidRecordTool
+    from .data_classification.list_dsm_event_mappings import ListDsmEventMappingsTool
+    from .data_classification.list_low_level_categories import ListLowLevelCategoriesTool
+    from .data_classification.list_high_level_categories import ListHighLevelCategoriesTool
+    from .health_data.get_security_data_count import GetSecurityDataCountTool
+    from .health_data.list_top_offenses import ListTopOffensesTool
+    from .health_data.list_top_rules import ListTopRulesTool
+    from .help.discover_qradar_endpoints import DiscoverQradarEndpointsTool
 
     from .services.geolocate_ip import GeolocateIpTool
     from .services.dns_lookup import DnsLookupTool
@@ -259,6 +279,7 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
 
     from .qvm.list_vulnerabilities import ListVulnerabilitiesTool
     from .qvm.list_qvm_assets import ListQvmAssetsTool
+    from .composite.get_offense_investigation_context import GetOffenseInvestigationContextTool
 
     MCPTool.set_qradar_client(qradar_client)
 
@@ -275,7 +296,7 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
         ListSourceAddressesTool(),
         ListLocalDestinationAddressesTool(),
 
-        # Ariel tools (8)
+        # Ariel tools (14)
         CreateArielSearchTool(),
         GetArielSearchStatusTool(),
         GetArielSearchResultsTool(),
@@ -284,6 +305,12 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
         GetSavedSearchTool(),
         DeleteSavedSearchTool(),
         ValidateAQLTool(),
+        ListArielDatabasesTool(),
+        ListArielFunctionsTool(),
+        GetArielParserKeywordsTool(),
+        GetArielDatabaseColumnsTool(),
+        ListArielLookupsTool(),
+        GetArielLookupTool(),
 
         # Reference data tools - Sets (7)
         ListReferenceSets(),
@@ -331,9 +358,28 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
         GetSystemInfoTool(),
         ListServersTool(),
 
-        # Configuration and access management tools (2)
+        # Configuration and access management tools (6)
         ListUsersTool(),
         ListUserRolesTool(),
+        ListNetworkHierarchyTool(),
+        ListDomainsTool(),
+        ListRegexPropertiesTool(),
+        ListCalculatedPropertiesTool(),
+
+        # Data classification / event taxonomy tools (5)
+        ListQidRecordsTool(),
+        GetQidRecordTool(),
+        ListDsmEventMappingsTool(),
+        ListLowLevelCategoriesTool(),
+        ListHighLevelCategoriesTool(),
+
+        # Health data tools (3)
+        GetSecurityDataCountTool(),
+        ListTopOffensesTool(),
+        ListTopRulesTool(),
+
+        # API help/discovery tools (1)
+        DiscoverQradarEndpointsTool(),
 
         # Network services and enrichment tools (5)
         GeolocateIpTool(),
@@ -349,6 +395,9 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
         # QVM vulnerability management (2)
         ListVulnerabilitiesTool(),
         ListQvmAssetsTool(),
+
+        # Composite read-only investigation workflows (1)
+        GetOffenseInvestigationContextTool(),
     ]
 
     # Filter tools based on feature toggles
