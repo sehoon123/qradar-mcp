@@ -1,70 +1,129 @@
 #!/usr/bin/env python3
 """
-Test MCP server running in local container mode.
+Smoke test for a locally running QRadar MCP server.
 
-This test connects to the MCP server running in standalone container mode,
-using the authorized service token from config.json for authentication.
+The local server reads config.json from the parent directory of the
+qradar-mcp checkout. This script follows the same lookup first, then falls
+back to a repository-local config.json for older Docker/development setups.
 """
 
 import asyncio
 import json
-import httpx
-import pytest
+import os
 from pathlib import Path
 
+import httpx
 
-@pytest.mark.asyncio
+try:
+    import pytest
+except ImportError:  # Allows `python tests/local_mcp_connection.py`.
+    pytest = None
+
+if pytest is not None:
+    pytestmark = pytest.mark.asyncio
+
+
+def _load_config():
+    repo_root = Path(__file__).resolve().parents[1]
+    candidates = [
+        repo_root.parent / "config.json",
+        repo_root / "config.json",
+    ]
+
+    for config_path in candidates:
+        if config_path.exists():
+            with open(config_path, encoding="utf-8") as config_file:
+                return config_path, json.load(config_file)
+
+    searched = ", ".join(str(path) for path in candidates)
+    raise FileNotFoundError(f"config.json not found. Searched: {searched}")
+
+
+def _build_base_url(config):
+    if os.getenv("MCP_BASE_URL"):
+        return os.getenv("MCP_BASE_URL").rstrip("/")
+
+    server_config = config.get("server", {})
+    host = os.getenv("MCP_HOST") or server_config.get("host") or "127.0.0.1"
+    port = os.getenv("MCP_PORT") or server_config.get("port") or 5000
+
+    if host in ("0.0.0.0", "::"):
+        host = "127.0.0.1"
+
+    return f"http://{host}:{port}"
+
+
+def _auth_headers(config):
+    qradar_config = config.get("qradar", {})
+    authorized_service_token = qradar_config.get("authorized_service_token") or ""
+    sec_token = qradar_config.get("sec_token") or ""
+    csrf_token = qradar_config.get("csrf_token") or ""
+
+    headers = {}
+    token_for_display = ""
+
+    if authorized_service_token:
+        headers["SEC"] = authorized_service_token
+        token_for_display = authorized_service_token
+    else:
+        if sec_token:
+            headers["SEC"] = sec_token
+            token_for_display = sec_token
+        if csrf_token:
+            headers["QRadarCSRF"] = csrf_token
+
+    return headers, token_for_display
+
+
+def _mask_token(token):
+    if not token:
+        return "(none)"
+    if len(token) <= 12:
+        return "*" * len(token)
+    return f"{token[:8]}...{token[-4:]}"
+
+
 async def test_local_mcp():
-    """Test MCP server in local container mode."""
-
-    # Load authorized service token from config.json
-    config_path = Path(__file__).parent.parent / "config.json"
+    """Test the locally running MCP server."""
     try:
-        with open(config_path) as f:
-            config = json.load(f)
-            auth_token = config.get("qradar", {}).get("authorized_service_token", "")
-            if not auth_token:
-                print("❌ No authorized_service_token found in config.json")
-                return
-    except FileNotFoundError:
-        print(f"❌ Config file not found: {config_path}")
-        return
-    except json.JSONDecodeError as e:
-        print(f"❌ Invalid JSON in config file: {e}")
+        config_path, config = _load_config()
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        print(f"Config error: {exc}")
         return
 
-    base_url = "http://localhost:5001"
+    headers, token_for_display = _auth_headers(config)
+    if "SEC" not in headers:
+        print("No SEC or authorized_service_token found in config.json")
+        return
+
+    base_url = _build_base_url(config)
     mcp_endpoint = f"{base_url}/mcp"
 
-    print("QRadar MCP Server - Local Container Test")
+    print("QRadar MCP Server - Local Test")
     print("=" * 50)
+    print(f"Config: {config_path}")
     print(f"Endpoint: {mcp_endpoint}")
-    print(f"Auth: Using authorized service token from config.json")
-    print(f"Token: {auth_token[:20]}...{auth_token[-10:]}\n")
+    print(f"Auth token: {_mask_token(token_for_display)}\n")
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # Step 1: Get session ID
             print("Step 1: Getting session ID...")
             response = await client.get(
                 mcp_endpoint,
-                headers={
-                    "Accept": "text/event-stream",
-                    "SEC": auth_token
-                }
+                headers={**headers, "Accept": "text/event-stream"}
             )
 
             print(f"Status: {response.status_code}")
-            session_id = response.headers.get('mcp-session-id')
+            session_id = response.headers.get("mcp-session-id")
 
             if not session_id:
-                print("❌ No session ID received!")
+                print("No session ID received.")
                 print(f"Headers: {dict(response.headers)}")
+                print(f"Body: {response.text[:500]}")
                 return
 
-            print(f"✅ Session ID: {session_id}\n")
+            print(f"Session ID: {session_id}\n")
 
-            # Step 2: Send initialize command
             print("Step 2: Sending initialize command...")
             init_request = {
                 "jsonrpc": "2.0",
@@ -83,44 +142,23 @@ async def test_local_mcp():
             response = await client.post(
                 mcp_endpoint,
                 headers={
+                    **headers,
                     "Content-Type": "application/json",
                     "Accept": "application/json, text/event-stream",
-                    "mcp-session-id": session_id,
-                    "SEC": auth_token
+                    "mcp-session-id": session_id
                 },
                 json=init_request
             )
 
             print(f"Status: {response.status_code}")
-            print(f"Content-Type: {response.headers.get('content-type')}")
 
-            if response.status_code == 200:
-                content_type = response.headers.get('content-type', '')
-                if 'text/event-stream' in content_type:
-                    print(f"✅ Initialize command sent (SSE stream response)")
-                    if response.text:
-                        lines = response.text.split('\n')
-                        for line in lines:
-                            if line.startswith('data: '):
-                                try:
-                                    data = json.loads(line[6:])
-                                    print(f"\nServer Response:")
-                                    print(json.dumps(data, indent=2))
-                                except json.JSONDecodeError:
-                                    print(f"Raw data: {line}")
-                else:
-                    result = response.json()
-                    print(f"✅ Initialize successful!")
-                    server_info = result.get('result', {}).get('serverInfo', {})
-                    print(f"Server: {server_info.get('name')}")
-                    print(f"Version: {server_info.get('version')}")
-                    print(f"Protocol: {result.get('result', {}).get('protocolVersion')}\n")
-            else:
-                print(f"❌ Initialize failed")
-                print(f"Response: {response.text}\n")
+            if response.status_code != 200:
+                print("Initialize failed.")
+                print(f"Response: {response.text}")
                 return
 
-            # Step 3: List tools
+            print("Initialize successful.\n")
+
             print("Step 3: Listing available tools...")
             list_tools_request = {
                 "jsonrpc": "2.0",
@@ -132,60 +170,53 @@ async def test_local_mcp():
             response = await client.post(
                 mcp_endpoint,
                 headers={
+                    **headers,
                     "Content-Type": "application/json",
                     "Accept": "application/json, text/event-stream",
-                    "mcp-session-id": session_id,
-                    "SEC": auth_token
+                    "mcp-session-id": session_id
                 },
                 json=list_tools_request
             )
 
             print(f"Status: {response.status_code}")
 
-            if response.status_code == 200:
-                content_type = response.headers.get('content-type', '')
-                if 'text/event-stream' in content_type:
-                    if response.text:
-                        lines = response.text.split('\n')
-                        for line in lines:
-                            if line.startswith('data: '):
-                                try:
-                                    data = json.loads(line[6:])
-                                    tools = data.get('result', {}).get('tools', [])
-                                    if tools:
-                                        print(f"\n✅ Found {len(tools)} tools")
-                                        print("\nFirst 10 tools:")
-                                        for i, tool in enumerate(tools[:10], 1):
-                                            desc = tool['description'].split('\n')[0][:60]
-                                            print(f"  {i}. {tool['name']}")
-                                            print(f"     {desc}...")
-                                except json.JSONDecodeError:
-                                    pass
-                else:
-                    result = response.json()
-                    tools = result.get('result', {}).get('tools', [])
-                    print(f"\n✅ Found {len(tools)} tools")
-                    print("\nFirst 10 tools:")
-                    for i, tool in enumerate(tools[:10], 1):
-                        desc = tool['description'].split('\n')[0][:60]
-                        print(f"  {i}. {tool['name']}: {desc}...")
-            else:
-                print(f"❌ List tools failed")
+            if response.status_code != 200:
+                print("List tools failed.")
                 print(f"Response: {response.text}")
                 return
 
+            tools = []
+            content_type = response.headers.get("content-type", "")
+            if "text/event-stream" in content_type:
+                for line in response.text.splitlines():
+                    if line.startswith("data: "):
+                        try:
+                            data = json.loads(line[6:])
+                        except json.JSONDecodeError:
+                            continue
+                        tools = data.get("result", {}).get("tools", [])
+                        if tools:
+                            break
+            else:
+                tools = response.json().get("result", {}).get("tools", [])
+
+            print(f"\nFound {len(tools)} tools")
+            print("\nFirst 10 tools:")
+            for index, tool in enumerate(tools[:10], 1):
+                description = tool.get("description", "").split("\n")[0][:70]
+                print(f"  {index}. {tool.get('name')}: {description}...")
+
             print("\n" + "=" * 50)
-            print("✅ MCP Server is fully operational in local mode!")
+            print("MCP server is operational in local mode.")
             print("=" * 50)
 
-    except httpx.ConnectError as e:
-        print(f"\n❌ Connection Error: Cannot connect to {base_url}")
-        print(f"   Make sure the container is running: docker-compose ps")
-        print(f"   Error details: {e}")
-    except Exception as e:
-        print(f"\n❌ Error: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
+    except httpx.ConnectError as exc:
+        print(f"\nConnection error: cannot connect to {base_url}")
+        print("Make sure the server is running with `python server.py`.")
+        print(f"Details: {exc}")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        print(f"\nError: {type(exc).__name__}: {exc}")
+        raise
 
 
 if __name__ == "__main__":

@@ -18,10 +18,12 @@ services:
 
       # Server settings
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=5000
       - PYTHONUNBUFFERED=1
     volumes:
-      # Mount config for run local (optional)
-      - ./config.json:/opt/app-root/qradar-mcp/config.json:ro
+      # Mount config where the local/Docker config loader expects it
+      - ./config.json:/opt/app-root/config.json:ro
 
       # Mount logs directory
       - ./logs:/opt/app-root/logs
