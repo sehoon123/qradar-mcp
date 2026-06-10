@@ -216,6 +216,19 @@ class MCPTool(ABC):
             # Sanitize input arguments
             sanitized_args = self._sanitize_arguments(arguments)
 
+            # Compatibility gate: block tools whose required QRadar endpoints are
+            # absent on the connected deployment. Fails open (returns None) if the
+            # endpoint catalog cannot be determined.
+            unsupported = await self._check_compatibility()
+            if unsupported:
+                log_structured(
+                    f"Tool blocked by compatibility gate: {self.name}",
+                    level='WARNING',
+                    tool_name=self.name,
+                    reason=unsupported
+                )
+                return self.create_error_response(unsupported)
+
             # Execute the actual tool implementation
             result = await self._execute_impl(sanitized_args)
 
@@ -284,6 +297,32 @@ class MCPTool(ABC):
             # Return error response
             return self.create_error_response(f"Tool execution failed: {str(e)}")
 
+
+    async def _check_compatibility(self) -> Optional[str]:
+        """
+        Check this tool's required QRadar endpoints against the connected console.
+
+        Returns a user-facing message if the tool is unsupported on the deployment,
+        or None if the call may proceed (ungated tool, gate disabled, or fail-open).
+        Any unexpected error is swallowed so gating can never break a tool call.
+        """
+        try:
+            # Allow disabling the gate entirely via feature toggles.
+            from qradar_mcp.utils.feature_toggle_manager import get_feature_toggle_manager
+            manager = get_feature_toggle_manager()
+            if manager is not None and not getattr(manager, 'compatibility_gate_enabled', True):
+                return None
+
+            from qradar_mcp.tools.compatibility import gate_tool_call
+            return await gate_tool_call(self)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            log_structured(
+                f"Compatibility gate check failed; allowing call: {self.name}",
+                level='WARNING',
+                tool_name=self.name,
+                error=str(exc)
+            )
+            return None
 
     def to_mcp_tool_definition(self) -> Dict[str, Any]:
         """Convert tool to MCP tool definition format."""

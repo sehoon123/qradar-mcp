@@ -98,19 +98,30 @@ class FeatureToggleManager:
                 "Missing required field 'group_toggles' in feature toggle configuration"
             )
 
+        self.read_only_mode = config.get('read_only_mode', False)
+        # When enabled, tools are gated at call time against the connected
+        # console's live /help/endpoints catalog (see tools/compatibility.py).
+        self.compatibility_gate_enabled = config.get('compatibility_gate_enabled', True)
         self.verb_toggles = config['verb_toggles']
         self.group_toggles = config['group_toggles']
         self.per_tool_toggles = config.get('per_tool_toggles', {})
         self.resource_toggles = config.get('resource_toggles', {})
+        # Tool class names that perform a non-GET HTTP request which is
+        # nonetheless read-only (e.g. Ariel searches use POST to create a
+        # transient search job but never mutate QRadar data). These are the
+        # only non-GET tools permitted while read_only_mode is enabled.
+        self.read_only_post_allowlist = config.get('read_only_post_allowlist', [])
 
         log_structured(
             "Feature toggle configuration loaded successfully",
             level='INFO',
             config_path=self.config_path,
+            read_only_mode=self.read_only_mode,
             verb_toggles=self.verb_toggles,
             group_toggles=self.group_toggles,
             per_tool_toggle_count=len(self.per_tool_toggles),
-            resource_toggle_count=len(self.resource_toggles)
+            resource_toggle_count=len(self.resource_toggles),
+            read_only_post_allowlist=self.read_only_post_allowlist
         )
 
     def is_tool_enabled(self, tool) -> bool:
@@ -133,6 +144,18 @@ class FeatureToggleManager:
         Returns:
             bool: True if tool is enabled, False otherwise
         """
+        # Read-only mode is a hard safety gate. It intentionally takes
+        # precedence over per-tool overrides so mutating tools cannot be
+        # enabled accidentally. The only exception is tools explicitly listed
+        # in read_only_post_allowlist, which use a non-GET verb but do not
+        # mutate QRadar data (e.g. Ariel search creation/validation). For
+        # those, the verb gate is bypassed and enablement is decided solely by
+        # the tool's group toggle.
+        if self.read_only_mode and tool.http_verb != 'GET':
+            if tool.__class__.__name__ not in self.read_only_post_allowlist:
+                return False
+            return self.group_toggles.get(tool.tool_group, False)
+
         # Step 1: Check per-tool override (from JSON config)
         tool_class_name = tool.__class__.__name__
         if tool_class_name in self.per_tool_toggles:
