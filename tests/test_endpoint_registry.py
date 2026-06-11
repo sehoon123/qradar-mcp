@@ -1,53 +1,7 @@
 """Tests for EndpointSpec coverage across registered tools."""
 
-import json
-from unittest.mock import AsyncMock, Mock
-
 from qradar_mcp.tools.endpoint_registry import ENDPOINT_SPECS
-from qradar_mcp.tools.fastmcp_adapter import _load_tool_class, register_all_tools
-from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
-
-
-def _all_enabled_manager(tmp_path):
-    config = {
-        "read_only_mode": False,
-        "verb_toggles": {"GET": True, "POST": True, "DELETE": True, "PUT": True, "PATCH": True},
-        "group_toggles": {
-            "offense": True,
-            "ariel": True,
-            "reference_data": True,
-            "asset": True,
-            "log_source": True,
-            "analytics": True,
-            "system": True,
-            "config": True,
-            "data_classification": True,
-            "health_data": True,
-            "help": True,
-            "services": True,
-            "composite": True,
-            "forensics": True,
-            "qvm": True,
-        },
-        "per_tool_toggles": {},
-    }
-    path = tmp_path / "feature_toggles.json"
-    path.write_text(json.dumps(config), encoding="utf-8")
-    return FeatureToggleManager(str(path))
-
-
-def test_all_registered_tools_have_endpoint_specs(tmp_path):
-    mock_mcp = Mock()
-    mock_mcp.tool = Mock(return_value=lambda func: func)
-    registered_tools, skipped_tools = register_all_tools(
-        mock_mcp,
-        _all_enabled_manager(tmp_path),
-        AsyncMock(),
-    )
-
-    assert skipped_tools == []
-    registered_class_names = {type(tool).__name__ for tool in registered_tools}
-    assert registered_class_names == set(ENDPOINT_SPECS)
+from qradar_mcp.tools.fastmcp_adapter import _load_tool_class
 
 
 def test_all_endpoint_specs_resolve_to_tool_classes():

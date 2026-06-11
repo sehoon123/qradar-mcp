@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.compatibility import get_fail_mode, refresh_catalog
+from qradar_mcp.tools.capability_registry import CAPABILITY_SPECS
 from qradar_mcp.tools.endpoint_registry import ENDPOINT_SPECS
 from qradar_mcp.tools.schema import schema
 from qradar_mcp.utils.feature_toggle_manager import get_feature_toggle_manager
@@ -51,7 +52,10 @@ Use this before enabling broader profiles or after QRadar upgrades."""
             "feature_toggles": self._feature_toggle_report(),
             "tool_registry": {
                 "endpoint_spec_count": len(ENDPOINT_SPECS),
-                "groups": self._tool_group_counts(),
+                "public_capability_count": len(CAPABILITY_SPECS),
+                "endpoint_groups": self._endpoint_group_counts(),
+                "public_capability_groups": self._capability_group_counts(),
+                "public_capabilities": sorted(spec.tool_name for spec in CAPABILITY_SPECS.values()),
             },
             "recommendations": [],
         }
@@ -161,9 +165,16 @@ Use this before enabling broader profiles or after QRadar upgrades."""
         }
 
     @staticmethod
-    def _tool_group_counts() -> Dict[str, int]:
+    def _endpoint_group_counts() -> Dict[str, int]:
         counts: Dict[str, int] = {}
         for spec in ENDPOINT_SPECS.values():
+            counts[spec.group] = counts.get(spec.group, 0) + 1
+        return dict(sorted(counts.items()))
+
+    @staticmethod
+    def _capability_group_counts() -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for spec in CAPABILITY_SPECS.values():
             counts[spec.group] = counts.get(spec.group, 0) + 1
         return dict(sorted(counts.items()))
 

@@ -48,11 +48,19 @@ qradar-mcp/
 
 ## Tool Coverage
 
-The adapter currently tracks 123 tool implementations. The default
-`feature_toggles.json` profile registers the read-only-safe subset and skips
-QRadar-mutating tools before they are imported as registration candidates.
+The internal endpoint catalog currently tracks 123 QRadar API-backed
+implementations in `tools/endpoint_registry.py`. That catalog is used for API
+version checks, compatibility gating, permissions hints, and implementation
+metadata; it is not exposed wholesale to MCP clients.
 
-Enabled read-only areas include:
+The public MCP surface is intentionally smaller and is driven by
+`tools/capability_registry.py`. Capabilities represent user-facing SOC tasks or
+operator diagnostics and may call multiple QRadar REST endpoints internally.
+The default `feature_toggles.json` profile registers only public capabilities
+and skips QRadar-mutating capability modules before they are imported as
+registration candidates.
+
+Internal endpoint coverage includes:
 
 - Offenses and offense context
 - Ariel searches, saved searches, search metadata, AQL validation, and Ariel metadata
@@ -65,8 +73,12 @@ Enabled read-only areas include:
 - QRadar deployment diagnostics through `qradar_doctor`
 - Composite offense investigation context and Ariel event evidence workflow
 
-System/config metadata, health metrics, forensics, QVM, and network service
-tools are present but disabled by default in the read-only local profile.
+The default public capability surface is smaller: `qradar_doctor`,
+`discover_qradar_endpoints`, `list_offenses`,
+`get_offense_investigation_context`, `investigate_offense_events`, and
+`validate_aql`. System/config metadata, health metrics, forensics, QVM, and
+network service endpoint wrappers remain internal or profile-gated unless an
+operator deliberately promotes them to capabilities.
 
 ## Local Python Setup
 
@@ -291,11 +303,13 @@ For strict read-only operation, keep `read_only_mode` enabled and keep
 Tool outputs default to structured JSON for agent workflows. Tools that expose
 `format_output` return human-readable text only when `format_output=true`.
 
-Tool registration is driven by `tools/endpoint_registry.py`. To add a tool, add
-an `EndpointSpec` entry whose `group`, `tool_name`, and `class_name` resolve to
-`qradar_mcp.tools.<group>.<tool_name>.<class_name>`. The FastMCP adapter loads
-those classes dynamically from the registry and applies read-only filtering
-before importing mutating tool modules.
+Endpoint registration and public tool registration are separate:
+
+- Add every QRadar API wrapper to `tools/endpoint_registry.py` as an
+  `EndpointSpec`. This keeps the internal API catalog complete.
+- Add only user-facing MCP capabilities to `tools/capability_registry.py` as a
+  `CapabilitySpec`. The FastMCP adapter loads only those classes dynamically
+  and applies read-only filtering before importing mutating capability modules.
 
 ## Optional Docker Usage
 

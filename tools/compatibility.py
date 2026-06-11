@@ -48,6 +48,7 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Set, Tuple
 
+from qradar_mcp.tools.capability_registry import compatibility_registry_from_capabilities
 from qradar_mcp.tools.endpoint_registry import compatibility_registry_from_specs
 from qradar_mcp.utils.structured_logger import log_structured
 
@@ -210,6 +211,7 @@ COMPATIBILITY_REGISTRY: Dict[str, Dict] = {  # pylint: disable=invalid-name
     },
 }
 COMPATIBILITY_REGISTRY = compatibility_registry_from_specs(COMPATIBILITY_REGISTRY)  # pylint: disable=invalid-name
+COMPATIBILITY_REGISTRY = compatibility_registry_from_capabilities(COMPATIBILITY_REGISTRY)  # pylint: disable=invalid-name
 
 # The baseline API version this fork commits to supporting by default.
 BASELINE_API_VERSION = "24.0"

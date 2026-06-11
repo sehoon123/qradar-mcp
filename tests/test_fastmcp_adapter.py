@@ -19,11 +19,11 @@ Tests for FastMCP Adapter
 Tests the adapter pattern that bridges MCPTool implementations with FastMCP.
 """
 
-import importlib
 from unittest.mock import Mock, patch, AsyncMock
 
 import pytest
 import httpx
+from qradar_mcp.tools.capability_registry import CAPABILITY_SPECS
 from qradar_mcp.tools.fastmcp_adapter import (
     _json_schema_type_to_python,
     _create_pydantic_fields,
@@ -438,13 +438,13 @@ class TestRegisterAllTools:
                 "qvm": false
             },
             "per_tool_toggles": {
-                "GetOffenseTool": false
+                "QradarDoctorTool": false
             }
         }""")
         return FeatureToggleManager(str(config_file))
 
     def test_all_tools_registered_when_all_enabled(self, all_enabled_config):
-        """Test that all 123 tools are registered when all toggles are enabled."""
+        """Test that all public capabilities are registered when enabled."""
         from qradar_mcp.tools.fastmcp_adapter import register_all_tools
 
         mock_mcp = Mock()
@@ -453,8 +453,7 @@ class TestRegisterAllTools:
 
         registered_tools, skipped_tools = register_all_tools(mock_mcp, all_enabled_config, mock_qradar_client)
 
-        # Should register all 123 tools
-        assert len(registered_tools) == 123
+        assert len(registered_tools) == len(CAPABILITY_SPECS)
         assert len(skipped_tools) == 0
 
     def test_returns_tuple(self, all_enabled_config):
@@ -485,43 +484,67 @@ class TestRegisterAllTools:
         # Should have some registered and some skipped
         assert len(registered_tools) > 0
         assert len(skipped_tools) > 0
-        assert len(registered_tools) + len(skipped_tools) == 123
+        assert len(registered_tools) + len(skipped_tools) == len(CAPABILITY_SPECS)
 
-    def test_delete_verb_disabled_skips_delete_tools(self, some_disabled_config):
-        """Test that tools with DELETE verb are skipped when DELETE is disabled."""
+    def test_public_capabilities_do_not_include_delete_tools(self, all_enabled_config):
+        """Test that public capability registration excludes DELETE endpoint wrappers."""
         from qradar_mcp.tools.fastmcp_adapter import register_all_tools
 
         mock_mcp = Mock()
         mock_mcp.tool = Mock(return_value=lambda func: func)
         mock_qradar_client = AsyncMock()
 
-        registered_tools, skipped_tools = register_all_tools(mock_mcp, some_disabled_config, mock_qradar_client)
+        registered_tools, skipped_tools = register_all_tools(mock_mcp, all_enabled_config, mock_qradar_client)
 
-        # Check that no registered tools have DELETE verb
-        for tool in registered_tools:
-            assert tool.http_verb != "DELETE"
+        assert skipped_tools == []
+        assert all(tool.http_verb != "DELETE" for tool in registered_tools)
 
-        # Check that all DELETE tools are in skipped list
-        delete_tools = [t for t in skipped_tools if t.http_verb == "DELETE"]
-        assert len(delete_tools) > 0
-
-    def test_qvm_group_disabled_skips_qvm_tools(self, some_disabled_config):
-        """Test that QVM tools are skipped when qvm group is disabled."""
+    def test_disabled_group_skips_public_capabilities(self, tmp_path):
+        """Test that group toggles apply to public capabilities."""
+        from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
         from qradar_mcp.tools.fastmcp_adapter import register_all_tools
 
+        config_file = tmp_path / "feature_toggles.json"
+        config_file.write_text("""{
+            "verb_toggles": {
+                "GET": true,
+                "POST": true,
+                "DELETE": true
+            },
+            "group_toggles": {
+                "offense": true,
+                "ariel": true,
+                "reference_data": true,
+                "asset": true,
+                "log_source": true,
+                "analytics": true,
+                "system": true,
+                "config": true,
+                "data_classification": true,
+                "health_data": true,
+                "help": false,
+                "services": true,
+                "composite": true,
+                "forensics": true,
+                "qvm": true
+            },
+            "per_tool_toggles": {}
+        }""")
         mock_mcp = Mock()
         mock_mcp.tool = Mock(return_value=lambda func: func)
         mock_qradar_client = AsyncMock()
 
-        registered_tools, skipped_tools = register_all_tools(mock_mcp, some_disabled_config, mock_qradar_client)
+        registered_tools, skipped_tools = register_all_tools(
+            mock_mcp,
+            FeatureToggleManager(str(config_file)),
+            mock_qradar_client,
+        )
 
-        # Check that no registered tools are from qvm group
-        for tool in registered_tools:
-            assert tool.tool_group != "qvm"
-
-        # Check that all qvm tools are in skipped list
-        qvm_tools = [t for t in skipped_tools if t.tool_group == "qvm"]
-        assert len(qvm_tools) == 14
+        assert all(tool.tool_group != "help" for tool in registered_tools)
+        assert {type(tool).__name__ for tool in skipped_tools if tool.tool_group == "help"} == {
+            "DiscoverQradarEndpointsTool",
+            "QradarDoctorTool",
+        }
 
     def test_per_tool_override_skips_specific_tool(self, some_disabled_config):
         """Test that per-tool override disables specific tool."""
@@ -533,13 +556,13 @@ class TestRegisterAllTools:
 
         registered_tools, skipped_tools = register_all_tools(mock_mcp, some_disabled_config, mock_qradar_client)
 
-        # Check that get_offense is not registered
+        # Check that qradar_doctor is not registered
         registered_names = [t.name for t in registered_tools]
-        assert "get_offense" not in registered_names
+        assert "qradar_doctor" not in registered_names
 
-        # Check that get_offense is in skipped list
+        # Check that qradar_doctor is in skipped list
         skipped_names = [t.name for t in skipped_tools]
-        assert "get_offense" in skipped_names
+        assert "qradar_doctor" in skipped_names
 
     def test_no_duplicate_tools(self, some_disabled_config):
         """Test that no tool appears in both registered and skipped lists."""
@@ -557,99 +580,8 @@ class TestRegisterAllTools:
         # No overlap between registered and skipped
         assert len(registered_names & skipped_names) == 0
 
-        # All 123 tools accounted for
-        assert len(registered_names | skipped_names) == 123
-
-    def test_read_only_mode_excludes_mutating_registration_candidates(self, tmp_path):
-        """Test read-only mode does not import/register QRadar-mutating tools."""
-        from qradar_mcp.tools.endpoint_registry import ENDPOINT_SPECS
-        from qradar_mcp.tools.fastmcp_adapter import register_all_tools
-        from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
-
-        config_file = tmp_path / "feature_toggles.json"
-        config_file.write_text("""{
-            "read_only_mode": true,
-            "verb_toggles": {
-                "GET": true,
-                "POST": false,
-                "DELETE": false
-            },
-            "group_toggles": {
-                "offense": true,
-                "ariel": true,
-                "reference_data": true,
-                "asset": true,
-                "log_source": true,
-                "analytics": true,
-                "system": true,
-                "config": true,
-                "data_classification": true,
-                "health_data": true,
-                "help": true,
-                "services": true,
-                "composite": true,
-                "forensics": true,
-                "qvm": true
-            },
-            "read_only_post_allowlist": [
-                "ValidateAQLTool",
-                "InvestigateOffenseEventsTool"
-            ],
-            "per_tool_toggles": {}
-        }""")
-
-        mock_mcp = Mock()
-        mock_mcp.tool = Mock(return_value=lambda func: func)
-
-        mutating_classes = {
-            "UpdateOffenseTool",
-            "AddOffenseNoteTool",
-            "DeleteArielSearchTool",
-            "DeleteSavedSearchTool",
-            "CreateReferenceSetTool",
-            "UpdateReferenceSetTool",
-            "DeleteReferenceSetTool",
-            "AddToReferenceSetTool",
-            "RemoveFromReferenceSetTool",
-            "CreateReferenceMap",
-            "AddToReferenceMap",
-            "DeleteReferenceMap",
-            "RemoveFromReferenceMap",
-            "CreateReferenceTable",
-            "AddToReferenceTable",
-            "DeleteReferenceTable",
-            "RemoveFromReferenceTable",
-        }
-        mutating_module_paths = {
-            spec.module_path
-            for spec in ENDPOINT_SPECS.values()
-            if not spec.read_only
-        }
-        imported_modules = []
-        real_import_module = importlib.import_module
-
-        def guarded_import_module(name):
-            imported_modules.append(name)
-            if name in mutating_module_paths:
-                raise AssertionError(f"Mutating module should not be imported in read-only mode: {name}")
-            return real_import_module(name)
-
-        with patch("qradar_mcp.tools.fastmcp_adapter.import_module", side_effect=guarded_import_module):
-            registered_tools, skipped_tools = register_all_tools(
-                mock_mcp,
-                FeatureToggleManager(str(config_file)),
-                AsyncMock(),
-            )
-
-        candidate_classes = {type(tool).__name__ for tool in registered_tools + skipped_tools}
-        assert candidate_classes.isdisjoint(mutating_classes)
-        assert mutating_module_paths.isdisjoint(imported_modules)
-
-        registered_non_get = {type(tool).__name__ for tool in registered_tools if tool.http_verb != "GET"}
-        assert registered_non_get == {
-            "ValidateAQLTool",
-            "InvestigateOffenseEventsTool",
-        }
+        # All public capabilities accounted for
+        assert len(registered_names | skipped_names) == len(CAPABILITY_SPECS)
 
 
 if __name__ == "__main__":

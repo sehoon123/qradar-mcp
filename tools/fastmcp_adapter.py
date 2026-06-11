@@ -33,8 +33,7 @@ from jsonschema import Draft7Validator
 from pydantic import Field
 
 from .base import MCPTool
-from .endpoint_registry import ENDPOINT_SPECS
-from .endpoint_spec import EndpointSpec
+from .capability_registry import CAPABILITY_SPECS, CapabilitySpec
 
 
 def _json_schema_type_to_python(json_type: str) -> type:
@@ -195,22 +194,22 @@ def register_mcp_tool_with_fastmcp(mcp: FastMCP, tool: MCPTool) -> None:
     mcp.tool()(tool_wrapper)
 
 
-def _iter_registration_specs(toggle_manager) -> Iterable[EndpointSpec]:
+def _iter_registration_specs(toggle_manager) -> Iterable[CapabilitySpec]:
     """
-    Yield endpoint specs that should be considered for registration.
+    Yield public capability specs that should be considered for registration.
 
     In read-only mode, specs marked ``read_only=False`` are removed before class
     loading so mutating tool modules are not imported at all.
     """
     read_only_mode = getattr(toggle_manager, "read_only_mode", False)
-    for spec in ENDPOINT_SPECS.values():
+    for spec in CAPABILITY_SPECS.values():
         if read_only_mode and not spec.read_only:
             continue
         yield spec
 
 
-def _load_tool_class(spec: EndpointSpec) -> type[MCPTool]:
-    """Load a tool class from its EndpointSpec metadata."""
+def _load_tool_class(spec: CapabilitySpec) -> type[MCPTool]:
+    """Load a tool class from its capability metadata."""
     module = import_module(spec.module_path)
     tool_class = getattr(module, spec.class_name)
     if not issubclass(tool_class, MCPTool):
@@ -219,7 +218,7 @@ def _load_tool_class(spec: EndpointSpec) -> type[MCPTool]:
 
 
 def _build_tool_candidates(toggle_manager) -> list[MCPTool]:
-    """Instantiate all registration candidates from the endpoint registry."""
+    """Instantiate all registration candidates from the capability registry."""
     return [_load_tool_class(spec)() for spec in _iter_registration_specs(toggle_manager)]
 
 
@@ -227,10 +226,11 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:
     """
     Register enabled MCPTool instances with FastMCP.
 
-    EndpointSpec is the source of truth for class loading, feature-toggle
-    filtering, and compatibility metadata. In read-only mode, QRadar-mutating
-    specs are filtered before import, so mutating modules are not loaded as
-    registration candidates.
+    CapabilitySpec is the source of truth for public MCP tool exposure.
+    EndpointSpec remains the internal QRadar REST API catalog used by
+    compatibility checks and low-level implementation metadata. In read-only
+    mode, mutating capability specs are filtered before import, so mutating
+    modules are not loaded as registration candidates.
 
     Args:
         mcp: FastMCP server instance

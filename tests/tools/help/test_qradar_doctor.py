@@ -3,6 +3,7 @@
 import pytest
 
 import qradar_mcp.tools.compatibility as compat
+from qradar_mcp.tools.capability_registry import CAPABILITY_SPECS
 from qradar_mcp.tools.help.qradar_doctor import QradarDoctorTool
 from qradar_mcp.utils.feature_toggle_manager import set_feature_toggle_manager
 
@@ -75,6 +76,8 @@ async def test_qradar_doctor_reports_internal_http_and_catalog():
     assert report["auth"]["identity_type"] == "authorized_service"
     assert report["compatibility"]["catalog_available"] is True
     assert report["compatibility"]["endpoint_count"] == 2
+    assert report["tool_registry"]["public_capability_count"] == len(CAPABILITY_SPECS)
+    assert "qradar_doctor" in report["tool_registry"]["public_capabilities"]
 
 
 @pytest.mark.asyncio
