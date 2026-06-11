@@ -6,6 +6,7 @@
     "authorized_service_token": "",
     "app_id": "",
     "verify_ssl": true,
+    "allow_plain_http_private_network": false,
     "api_version": "27.0",
     "proxy": null
   },

@@ -155,7 +155,8 @@ class TestQRadarRestClientUrlGeneration:
         mock_load_config.return_value = {
             "qradar": {
                 "host": "http://192.168.1.10",
-                "sec_token": "test_token"
+                "sec_token": "test_token",
+                "allow_plain_http_private_network": True
             }
         }
 
@@ -164,12 +165,44 @@ class TestQRadarRestClientUrlGeneration:
         assert client._generate_full_url("siem/offenses") == "http://192.168.1.10/api/siem/offenses"
 
     @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_generate_full_url_rejects_plain_http_without_explicit_allow(self, mock_load_config):
+        """Test HTTP QRadar access requires explicit opt-in."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "http://192.168.1.10",
+                "sec_token": "test_token"
+            }
+        }
+
+        client = QRadarRestClient()
+
+        with pytest.raises(ValueError, match="Plain HTTP QRadar API access is disabled"):
+            client._generate_full_url("siem/offenses")
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_generate_full_url_rejects_plain_http_public_host(self, mock_load_config):
+        """Test HTTP opt-in is still limited to private/internal hosts."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "http://example.com",
+                "sec_token": "test_token",
+                "allow_plain_http_private_network": True
+            }
+        }
+
+        client = QRadarRestClient()
+
+        with pytest.raises(ValueError, match="Plain HTTP QRadar API access is disabled"):
+            client._generate_full_url("siem/offenses")
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
     def test_generate_full_url_normalizes_leading_slash(self, mock_load_config):
         """Test API paths with leading slash do not create double slashes."""
         mock_load_config.return_value = {
             "qradar": {
                 "host": "http://192.168.1.10",
-                "sec_token": "test_token"
+                "sec_token": "test_token",
+                "allow_plain_http_private_network": True
             }
         }
 
@@ -183,7 +216,8 @@ class TestQRadarRestClientUrlGeneration:
         mock_load_config.return_value = {
             "qradar": {
                 "host": "http://192.168.1.10/api/",
-                "sec_token": "test_token"
+                "sec_token": "test_token",
+                "allow_plain_http_private_network": True
             }
         }
 

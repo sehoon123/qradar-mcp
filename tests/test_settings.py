@@ -24,6 +24,7 @@ def test_load_settings_secure_defaults():
     settings = load_settings(None)
 
     assert settings.qradar.verify_ssl is True
+    assert settings.qradar.allow_plain_http_private_network is False
     assert settings.qradar.api_version is None
     assert settings.server.host == "127.0.0.1"
     assert settings.server.port == 5000
@@ -52,7 +53,15 @@ def test_load_settings_invalid_server_port_falls_back():
     assert settings.server.port == 5000
 
 
-@patch.dict("os.environ", {"QRADAR_API_VERSION": "26.0", "QRADAR_VERIFY_SSL": "false"}, clear=True)
+@patch.dict(
+    "os.environ",
+    {
+        "QRADAR_API_VERSION": "26.0",
+        "QRADAR_VERIFY_SSL": "false",
+        "QRADAR_ALLOW_PLAIN_HTTP_PRIVATE_NETWORK": "true",
+    },
+    clear=True
+)
 def test_load_settings_env_overrides_qradar_runtime_options():
     """Test supported env overrides are applied."""
     settings = load_settings({
@@ -65,6 +74,7 @@ def test_load_settings_env_overrides_qradar_runtime_options():
 
     assert settings.qradar.api_version == "26.0"
     assert settings.qradar.verify_ssl is False
+    assert settings.qradar.allow_plain_http_private_network is True
 
 
 def test_parse_bool_handles_common_values():

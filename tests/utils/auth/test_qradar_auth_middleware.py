@@ -205,6 +205,60 @@ class TestQRadarAuthMiddleware:
         assert data["code"] == "UNAUTHENTICATED"
 
     @pytest.mark.asyncio
+    async def test_middleware_skips_auth_for_health_routes(self):
+        """Test health routes do not call QRadar authentication APIs."""
+        mock_client = Mock()
+        mock_client.identify_user = AsyncMock(return_value=(1, "admin"))
+        mock_client.identify_authorized_service = AsyncMock(return_value=(10, "test_service"))
+
+        def api_client_factory():
+            return mock_client
+
+        async def health_endpoint(request):
+            return JSONResponse({"status": "ok"})
+
+        app = Starlette(routes=[Route("/healthz", health_endpoint)])
+        app.add_middleware(QRadarAuthMiddleware, api_client_factory=api_client_factory)
+
+        async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/healthz")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+        mock_client.identify_user.assert_not_called()
+        mock_client.identify_authorized_service.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_middleware_caches_identity_by_token_fingerprint(self):
+        """Test repeated requests with the same token reuse cached identity."""
+        mock_client = Mock()
+        mock_client.identify_user = AsyncMock(return_value=(1, "admin"))
+        mock_client.identify_authorized_service = AsyncMock(return_value=(-1, ""))
+
+        def api_client_factory():
+            return mock_client
+
+        async def test_endpoint(request):
+            return JSONResponse({
+                "user_id": get_user_id(),
+                "username": get_username(),
+            })
+
+        app = Starlette(routes=[Route("/test", test_endpoint)])
+        app.add_middleware(QRadarAuthMiddleware, api_client_factory=api_client_factory)
+
+        async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            first = await client.get("/test", headers={"SEC": "same-token"})
+            second = await client.get("/test", headers={"SEC": "same-token"})
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["username"] == "admin"
+        assert second.json()["username"] == "admin"
+        assert mock_client.identify_user.call_count == 1
+        mock_client.identify_authorized_service.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_middleware_prioritizes_user_auth_over_service(self):
         """Test that middleware tries user auth before service auth."""
         mock_client = Mock()

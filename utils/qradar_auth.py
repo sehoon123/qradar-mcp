@@ -21,11 +21,16 @@ authentication context in ContextVars, enabling access across async boundaries.
 """
 
 from contextvars import ContextVar
+import hashlib
+import time
 from typing import Optional, Dict, Any, Callable
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from .mcp_logger import log_mcp
+
+PUBLIC_AUTH_BYPASS_PATHS = {"/healthz", "/readyz"}
+AUTH_CACHE_TTL_SECONDS = 60.0
 
 
 # Context variables to store authentication information for the current request
@@ -171,6 +176,7 @@ class QRadarAuthMiddleware(BaseHTTPMiddleware):
         """
         super().__init__(app)
         self.api_client_factory = api_client_factory
+        self._auth_cache: Dict[str, Dict[str, Any]] = {}
 
     async def dispatch(self, request: Request, call_next):
         """
@@ -183,34 +189,40 @@ class QRadarAuthMiddleware(BaseHTTPMiddleware):
         Returns:
             Response from the handler or 401 error if authentication fails
         """
+        if request.url.path in PUBLIC_AUTH_BYPASS_PATHS:
+            return await call_next(request)
+
         # Get API client instance
         api_client = self.api_client_factory()
+        cache_key = self._auth_cache_key(request, api_client)
+
+        cached_identity = self._get_cached_identity(cache_key)
+        if cached_identity:
+            return await self._call_with_identity(cached_identity, request, call_next)
 
         # First, try to authenticate as a user
         user_id, username = await api_client.identify_user()
         if username and user_id:
-            set_user_auth(user_id, username)
+            identity = {
+                "type": "user",
+                "id": user_id,
+                "label": username,
+            }
+            self._set_cached_identity(cache_key, identity)
             log_mcp(f"Authenticated as user: {username} (ID: {user_id})", level='DEBUG')
-
-            try:
-                response = await call_next(request)
-                return response
-            finally:
-                # Clean up context after request
-                clear_auth_context()
+            return await self._call_with_identity(identity, request, call_next)
 
         # If user authentication fails, try authorized service authentication
         service_id, service_label = await api_client.identify_authorized_service()
         if service_label and service_id:
-            set_service_auth(service_id, service_label)
+            identity = {
+                "type": "service",
+                "id": service_id,
+                "label": service_label,
+            }
+            self._set_cached_identity(cache_key, identity)
             log_mcp(f"Authenticated as service: {service_label} (ID: {service_id})", level='DEBUG')
-
-            try:
-                response = await call_next(request)
-                return response
-            finally:
-                # Clean up context after request
-                clear_auth_context()
+            return await self._call_with_identity(identity, request, call_next)
 
         # If both authentication methods fail, return 401
         log_mcp("Authentication failed for both user and service", level='ERROR')
@@ -221,3 +233,76 @@ class QRadarAuthMiddleware(BaseHTTPMiddleware):
                 'message': 'User is not authenticated. Failing request.'
             }
         )
+
+    async def _call_with_identity(self, identity: Dict[str, Any], request: Request, call_next):
+        """Set auth context from an identity and continue the request."""
+        if identity["type"] == "user":
+            set_user_auth(identity["id"], identity["label"])
+        else:
+            set_service_auth(identity["id"], identity["label"])
+
+        try:
+            response = await call_next(request)
+            return response
+        finally:
+            clear_auth_context()
+
+    def _get_cached_identity(self, cache_key: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Return a cached identity if present and unexpired."""
+        if not cache_key:
+            return None
+
+        entry = self._auth_cache.get(cache_key)
+        if not entry:
+            return None
+
+        if entry["expires_at"] <= time.monotonic():
+            self._auth_cache.pop(cache_key, None)
+            return None
+
+        return entry["identity"]
+
+    def _set_cached_identity(self, cache_key: Optional[str], identity: Dict[str, Any]) -> None:
+        """Cache an identity without storing raw QRadar tokens."""
+        if not cache_key:
+            return
+
+        self._auth_cache[cache_key] = {
+            "identity": identity,
+            "expires_at": time.monotonic() + AUTH_CACHE_TTL_SECONDS,
+        }
+
+    @staticmethod
+    def _auth_cache_key(request: Request, api_client) -> Optional[str]:
+        """Build a token fingerprint for auth cache lookup."""
+        token_parts = QRadarAuthMiddleware._request_token_parts(request)
+        local_mode_auth = getattr(api_client, '_local_mode_auth', None)
+        if not token_parts and callable(local_mode_auth):
+            local_token_parts = local_mode_auth()
+            if isinstance(local_token_parts, dict):
+                token_parts = local_token_parts
+        if not token_parts:
+            return None
+
+        fingerprint_source = '|'.join(
+            f"{key}={token_parts[key]}"
+            for key in sorted(token_parts)
+            if token_parts[key]
+        )
+        if not fingerprint_source:
+            return None
+
+        return hashlib.sha256(fingerprint_source.encode('utf-8')).hexdigest()
+
+    @staticmethod
+    def _request_token_parts(request: Request) -> Dict[str, str]:
+        """Extract auth token values from request state or headers."""
+        state_tokens = getattr(request.state, 'auth_tokens', None)
+        token_parts = dict(state_tokens or {})
+
+        if 'SEC' in request.headers and 'sec_token' not in token_parts:
+            token_parts['sec_token'] = request.headers['SEC']
+        if 'QRadarCSRF' in request.headers and 'csrf_token' not in token_parts:
+            token_parts['csrf_token'] = request.headers['QRadarCSRF']
+
+        return token_parts

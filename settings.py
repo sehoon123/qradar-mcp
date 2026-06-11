@@ -41,6 +41,7 @@ class QRadarSettings(BaseModel):
     authorized_service_token: Optional[str] = None
     app_id: Optional[str] = None
     verify_ssl: bool = True
+    allow_plain_http_private_network: bool = False
     api_version: Optional[str] = None
     proxy: Optional[str] = None
 
@@ -124,6 +125,13 @@ def load_settings(config_data: Optional[dict] = None) -> AppSettings:
     qradar_verify_ssl = os.getenv("QRADAR_VERIFY_SSL")
     if qradar_verify_ssl is not None:
         settings.qradar.verify_ssl = parse_bool(qradar_verify_ssl, settings.qradar.verify_ssl)
+
+    qradar_allow_plain_http = os.getenv("QRADAR_ALLOW_PLAIN_HTTP_PRIVATE_NETWORK")
+    if qradar_allow_plain_http is not None:
+        settings.qradar.allow_plain_http_private_network = parse_bool(
+            qradar_allow_plain_http,
+            settings.qradar.allow_plain_http_private_network
+        )
 
     qradar_rest_proxy = os.getenv("QRADAR_REST_PROXY")
     if qradar_rest_proxy:

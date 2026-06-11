@@ -150,6 +150,58 @@ class TestQRadarRestClientPOST:
         # httpx handles proxies differently, just verify call was made
         assert mock_client.post.called
 
+    @pytest.mark.asyncio
+    @patch('qradar_mcp.utils.retry.asyncio.sleep')
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    async def test_post_retries_aql_validator(self, mock_load_config, mock_sleep):
+        """Test explicitly safe POST endpoints are retried."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "https://qradar.local",
+                "sec_token": "test_token"
+            }
+        }
+        mock_sleep.return_value = None
+
+        request = httpx.Request("POST", "https://qradar.local/api/ariel/validators/aql")
+        retryable_response = httpx.Response(503, request=request)
+        success_response = httpx.Response(200, request=request)
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post = AsyncMock(side_effect=[retryable_response, success_response])
+
+        client = QRadarRestClient(client=mock_client)
+        response = await client.post('ariel/validators/aql', data={"query_expression": "SELECT * FROM events"})
+
+        assert response.status_code == 200
+        assert mock_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    @patch('qradar_mcp.utils.retry.asyncio.sleep')
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    async def test_post_does_not_retry_ariel_search_creation(self, mock_load_config, mock_sleep):
+        """Test Ariel search job creation is not automatically retried."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "https://qradar.local",
+                "sec_token": "test_token"
+            }
+        }
+        mock_sleep.return_value = None
+
+        request = httpx.Request("POST", "https://qradar.local/api/ariel/searches")
+        retryable_response = httpx.Response(503, request=request)
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.post = AsyncMock(return_value=retryable_response)
+
+        client = QRadarRestClient(client=mock_client)
+        response = await client.post('ariel/searches', params={"query_expression": "SELECT * FROM events"})
+
+        assert response.status_code == 503
+        assert mock_client.post.call_count == 1
+        mock_sleep.assert_not_called()
+
 
 class TestQRadarRestClientDELETE:
     """Tests for DELETE method."""

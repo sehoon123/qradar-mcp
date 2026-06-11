@@ -14,7 +14,10 @@
 
 
 import os
+from ipaddress import ip_address
 from typing import Dict, Optional
+from urllib.parse import urlparse
+
 import httpx
 from qradar_mcp.settings import load_raw_config, load_settings, parse_bool
 from qradar_mcp.utils.retry import RetryConfig, retry_on_failure_async
@@ -24,6 +27,10 @@ from qradar_mcp.auth_context import get_request_auth_tokens
 
 QRADAR_CSRF = 'QRadarCSRF'
 SEC_HEADER = 'SEC'
+RETRYABLE_POST_ENDPOINTS = {
+    'ariel/validators/aql',
+    'ariel/processors/aql_metadata',
+}
 
 
 def load_config():
@@ -69,6 +76,7 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
             self._csrf_token = settings.qradar.csrf_token
             self._authorized_service_token = settings.qradar.authorized_service_token
             self._verify_ssl = settings.qradar.verify_ssl
+            self._allow_plain_http_private_network = settings.qradar.allow_plain_http_private_network
             self._api_version = settings.qradar.api_version
             self._proxy = settings.qradar.proxy
             self._local_mode = True
@@ -83,6 +91,10 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
             self._proxy = os.getenv('QRADAR_REST_PROXY')
             self._api_version = os.getenv('QRADAR_API_VERSION')
             self._verify_ssl = parse_bool(os.getenv('QRADAR_VERIFY_SSL'), True)
+            self._allow_plain_http_private_network = parse_bool(
+                os.getenv('QRADAR_ALLOW_PLAIN_HTTP_PRIVATE_NETWORK'),
+                False
+            )
             self._local_mode = False
 
         # Use provided client or shared client
@@ -162,10 +174,14 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
         )
         return self._raise_for_retryable_status(response)
 
-    @retry_on_failure_async(max_attempts=3, backoff_factor=2.0)
     async def post(self, api_path, headers=None, params=None, data=None, version=None, timeout=None):  # pylint: disable=too-many-positional-arguments,too-many-arguments
         """
-        Perform a POST request to the QRadar API with automatic retry on transient failures.
+        Perform a POST request to the QRadar API.
+
+        Only explicitly safe validation/metadata POST endpoints are retried.
+        Endpoints such as /ariel/searches create transient jobs and are never
+        automatically retried, because a timeout can happen after QRadar has
+        already accepted the job.
 
         Args:
             api_path: The API path (e.g., 'siem/offenses/123')
@@ -178,6 +194,34 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
         Returns:
             httpx.Response object
         """
+        if self._is_retryable_post_endpoint(api_path):
+            return await self._post_with_retry(api_path, headers, params, data, version, timeout)
+        return await self._post_once(api_path, headers, params, data, version, timeout)
+
+    @retry_on_failure_async(max_attempts=3, backoff_factor=2.0)
+    async def _post_with_retry(self, api_path, headers=None, params=None, data=None, version=None, timeout=None):  # pylint: disable=too-many-positional-arguments,too-many-arguments
+        """Perform a retryable POST request."""
+        return await self._post_once(
+            api_path=api_path,
+            headers=headers,
+            params=params,
+            data=data,
+            version=version,
+            timeout=timeout,
+            raise_retryable_status=True
+        )
+
+    async def _post_once(  # pylint: disable=too-many-positional-arguments,too-many-arguments
+        self,
+        api_path,
+        headers=None,
+        params=None,
+        data=None,
+        version=None,
+        timeout=None,
+        raise_retryable_status=False
+    ):
+        """Perform one POST request."""
         full_url = self._generate_full_url(api_path)
         headers = self._add_headers(headers, version)
 
@@ -210,7 +254,9 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
                 content=data
             )
 
-        return self._raise_for_retryable_status(response)
+        if raise_retryable_status:
+            return self._raise_for_retryable_status(response)
+        return response
 
     @retry_on_failure_async(max_attempts=3, backoff_factor=2.0)
     async def delete(self, api_path, headers=None, params=None, version=None, timeout=None):  # pylint: disable=too-many-positional-arguments
@@ -324,17 +370,53 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
 
     def _generate_full_url(self, api_path):
         """Generate the full URL for the API request."""
-        if not self._url:
+        base_url = self._normalize_qradar_base_url(self._url)
+        api_path = str(api_path).lstrip('/')
+        return f"{base_url}/api/{api_path}"
+
+    def _normalize_qradar_base_url(self, raw_url):
+        """Normalize and validate the QRadar console base URL."""
+        if not raw_url:
             raise RuntimeError("QRadar console URL is not configured")
 
-        base_url = self._url.strip().rstrip('/')
-        if not base_url.startswith(('http://', 'https://')):
-            base_url = f"https://{base_url}"
+        raw_url = str(raw_url).strip().rstrip('/')
+        parsed = urlparse(raw_url if '://' in raw_url else f"https://{raw_url}")
 
-        api_path = str(api_path).lstrip('/')
-        if base_url.endswith('/api'):
-            return f"{base_url}/{api_path}"
-        return f"{base_url}/api/{api_path}"
+        if parsed.scheme not in {'http', 'https'}:
+            raise ValueError(f"Unsupported QRadar URL scheme: {parsed.scheme}")
+
+        hostname = parsed.hostname or ''
+        if parsed.scheme == 'http':
+            if not self._allow_plain_http_private_network or not self._is_private_or_internal_host(hostname):
+                raise ValueError(
+                    "Plain HTTP QRadar API access is disabled unless "
+                    "allow_plain_http_private_network is enabled for a private/internal host."
+                )
+
+        path = parsed.path.rstrip('/')
+        if path and path != '/api':
+            raise ValueError("qradar.host must not include a path other than /api")
+
+        return f"{parsed.scheme}://{parsed.netloc}".rstrip('/')
+
+    @staticmethod
+    def _is_private_or_internal_host(hostname: str) -> bool:
+        """Return True for private IPs and common internal hostnames."""
+        normalized = hostname.lower()
+        if normalized in {'localhost'}:
+            return True
+        if normalized.endswith(('.local', '.internal')):
+            return True
+        try:
+            return ip_address(normalized).is_private
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _is_retryable_post_endpoint(api_path) -> bool:
+        """Return True when POST retries are safe for this endpoint."""
+        normalized = str(api_path).lstrip('/')
+        return normalized in RETRYABLE_POST_ENDPOINTS
 
     def _get_proxy_url(self):
         """Get proxy URL for requests. Returns None if no proxy is configured."""

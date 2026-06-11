@@ -19,10 +19,11 @@ This branch keeps QRadar data mutation disabled by default:
 - `GET` tools are enabled by default.
 - `DELETE` is disabled.
 - Non-allowlisted `POST` tools are disabled.
-- Two Ariel `POST` tools are explicitly allowlisted because they are read-only
-  from a QRadar data perspective:
+- A limited set of non-mutating or transient-search `POST` tools is explicitly
+  allowlisted:
   - `CreateArielSearchTool` creates a transient Ariel search job.
   - `ValidateAQLTool` validates AQL without changing QRadar data.
+  - `InvestigateOffenseEventsTool` runs a bounded offense event search workflow.
 - A runtime compatibility gate checks the connected QRadar console's
   `/help/versions` and `/help/endpoints` catalog before calling newly added
   tools. The intended compatibility baseline is QRadar API 24.0+.
@@ -134,6 +135,7 @@ Recommended local authentication is an authorized service token:
     "authorized_service_token": "YOUR_AUTHORIZED_SERVICE_TOKEN",
     "app_id": "",
     "verify_ssl": true,
+    "allow_plain_http_private_network": true,
     "api_version": "27.0",
     "proxy": null
   },
@@ -150,6 +152,9 @@ Notes:
 - `qradar.host` can include `http://` or `https://`. The client preserves an
   explicit scheme, which supports internal lab consoles such as
   `http://192.168.x.x`. If the scheme is omitted, HTTPS is used by default.
+- Plain HTTP is blocked unless `allow_plain_http_private_network` is explicitly
+  enabled and the host is a private IP or internal hostname such as `.local` or
+  `.internal`.
 - Do not include `/api` in `qradar.host`; the client tolerates it but normalizes
   API paths internally.
 - `qradar.api_version` is sent as the QRadar `Version` header on every API
@@ -219,6 +224,10 @@ Process health endpoints are also available:
 GET /healthz  # process liveness, no QRadar API call
 GET /readyz   # server initialization checks, no QRadar API call
 ```
+
+These endpoints bypass QRadar authentication middleware so Docker and
+orchestrator health checks do not depend on QRadar token validity or console
+availability.
 
 ## MCP Client Configuration
 
@@ -322,6 +331,9 @@ Permission and module expectations vary by console version and deployment:
 The default read-only profile still allowlists transient `POST` calls for AQL
 validation, Ariel search creation, and the composite Ariel evidence workflow.
 These create or inspect short-lived search jobs but do not mutate QRadar data.
+The REST client retries only explicitly safe POST endpoints such as AQL
+validation; Ariel search creation is not automatically retried because it may
+already have created a QRadar search job before a timeout is observed.
 
 ## Development
 
