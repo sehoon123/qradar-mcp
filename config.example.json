@@ -21,7 +21,7 @@
     "timeout": 30.0
   },
   "compatibility": {
-    "fail_mode": "open"
+    "fail_mode": "closed"
   },
   "auth": {
     "identity_probe": "strict"

@@ -143,7 +143,7 @@ Recommended local authentication is an authorized service token:
     "debug": true
   },
   "compatibility": {
-    "fail_mode": "open"
+    "fail_mode": "closed"
   },
   "auth": {
     "identity_probe": "strict"
@@ -166,9 +166,9 @@ Notes:
 - `verify_ssl` defaults to `true`. Set it to `false` only for lab or
   self-signed certificate environments.
 - User session auth is also supported with `sec_token` and `csrf_token`.
-- `compatibility.fail_mode` defaults to `open` for lab friendliness. Use
-  `closed` when `/help/versions` and `/help/endpoints` must be available before
-  gated tools run.
+- `compatibility.fail_mode` defaults to `open` in code for lab friendliness, but
+  the example config uses `closed` so `/help/versions` and `/help/endpoints`
+  must be available before gated tools run.
 - `auth.identity_probe` defaults to `strict`. `permissive` lets a request with
   a QRadar token proceed when identity lookup endpoints are unavailable, and
   `disabled_for_local_config` skips the identity lookup for local config tokens.
