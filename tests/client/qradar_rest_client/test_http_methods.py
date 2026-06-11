@@ -308,3 +308,29 @@ class TestQRadarRestClientDELETE:
         assert response.status_code == 204
         # httpx handles proxies differently, just verify call was made
         assert mock_client.delete.called
+
+    @pytest.mark.asyncio
+    @patch('qradar_mcp.utils.retry.asyncio.sleep')
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    async def test_delete_does_not_retry(self, mock_load_config, mock_sleep):
+        """Test DELETE requests are not automatically retried."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "https://qradar.local",
+                "sec_token": "test_token"
+            }
+        }
+        mock_sleep.return_value = None
+
+        request = httpx.Request("DELETE", "https://qradar.local/api/ariel/searches/s123")
+        retryable_response = httpx.Response(503, request=request)
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.delete = AsyncMock(return_value=retryable_response)
+
+        client = QRadarRestClient(client=mock_client)
+        response = await client.delete('ariel/searches/s123')
+
+        assert response.status_code == 503
+        assert mock_client.delete.call_count == 1
+        mock_sleep.assert_not_called()

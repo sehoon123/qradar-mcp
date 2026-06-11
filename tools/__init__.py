@@ -62,6 +62,7 @@ from .ariel.get_ariel_database_columns import GetArielDatabaseColumnsTool
 from .ariel.list_ariel_lookups import ListArielLookupsTool
 from .ariel.get_ariel_lookup import GetArielLookupTool
 from .ariel.get_ariel_search_metadata import GetArielSearchMetadataTool
+from .ariel.cancel_ariel_search import CancelArielSearchTool
 
 from .reference_data.list_reference_sets import ListReferenceSets
 from .reference_data.get_reference_set import GetReferenceSetTool
@@ -204,6 +205,7 @@ __all__ = [
     'ListArielLookupsTool',
     'GetArielLookupTool',
     'GetArielSearchMetadataTool',
+    'CancelArielSearchTool',
     'ListReferenceSets',
     'GetReferenceSetTool',
     'CreateReferenceSetTool',

@@ -11,6 +11,38 @@ from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
 
 
+DEFAULT_EVENT_FIELDS = (
+    "starttime",
+    "sourceip",
+    "destinationip",
+    "username",
+    "qid",
+    "QIDDESCRIPTION(qid) AS event_name",
+    "LOGSOURCENAME(logsourceid) AS log_source",
+    "magnitude",
+)
+
+ALLOWED_EVENT_FIELDS = frozenset({
+    "starttime",
+    "sourceip",
+    "destinationip",
+    "username",
+    "qid",
+    "magnitude",
+    "credibility",
+    "relevance",
+    "severity",
+    "logsourceid",
+    "QIDDESCRIPTION(qid) AS event_name",
+    "LOGSOURCENAME(logsourceid) AS log_source",
+})
+
+DEFAULT_TIME_WINDOW_MINUTES = 360
+MAX_TIME_WINDOW_MINUTES = 1440
+DEFAULT_MAX_EVENTS = 100
+MAX_EVENTS = 1000
+
+
 class InvestigateOffenseEventsTool(MCPTool):
     """Tool that runs a read-only Ariel workflow for offense-related events."""
 
@@ -34,17 +66,17 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
                 .minimum(0)
                 .required()
             .integer("time_window_minutes")
-                .description("Ariel time window in minutes when offense timestamps are not used (default: 1440)")
+                .description("Ariel time window in minutes (default: 360, max: 1440)")
                 .minimum(1)
-                .maximum(10080)
-                .default(1440)
+                .maximum(MAX_TIME_WINDOW_MINUTES)
+                .default(DEFAULT_TIME_WINDOW_MINUTES)
             .integer("max_events")
-                .description("Maximum event rows to return (default: 100, max: 10000)")
+                .description("Maximum event rows to return (default: 100, max: 1000)")
                 .minimum(1)
-                .maximum(10000)
-                .default(100)
+                .maximum(MAX_EVENTS)
+                .default(DEFAULT_MAX_EVENTS)
             .string("fields")
-                .description("Optional comma-separated event fields for SELECT")
+                .description("Optional comma-separated event fields from the safe allowlist")
             .integer("max_poll_attempts")
                 .description("Maximum status polling attempts after search creation (default: 3)")
                 .minimum(1)
@@ -67,7 +99,10 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
             return self.create_error_response("Error: offense_id is required")
 
         offense = await self._get_json(f"/siem/offenses/{int(offense_id)}")
-        query_expression = self._build_aql(arguments)
+        try:
+            query_expression = self._build_aql(arguments)
+        except ValueError as exc:
+            return self.create_error_response(f"Error: {exc}")
 
         validation = await self._validate_aql(query_expression)
         if not validation["valid"]:
@@ -96,7 +131,13 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
         warnings = []
         if str(status.get("status", "")).upper() == "COMPLETED":
             metadata = await self._get_json(f"/ariel/searches/{search_id}/metadata")
-            results = await self._get_results(search_id, int(arguments.get("max_events", 100)))
+            max_events = self._bounded_int(
+                arguments.get("max_events", DEFAULT_MAX_EVENTS),
+                "max_events",
+                1,
+                MAX_EVENTS,
+            )
+            results = await self._get_results(search_id, max_events)
         else:
             warnings.append("Search did not complete within polling limits; use get_ariel_search_status/results later.")
 
@@ -114,18 +155,51 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
         })
 
     def _build_aql(self, arguments: Dict[str, Any]) -> str:
-        fields = arguments.get("fields")
-        select_fields = fields or (
-            "starttime, sourceip, destinationip, username, qid, "
-            "QIDDESCRIPTION(qid) AS event_name, LOGSOURCENAME(logsourceid) AS log_source, magnitude"
+        select_fields = self._normalize_select_fields(arguments.get("fields"))
+        max_events = self._bounded_int(
+            arguments.get("max_events", DEFAULT_MAX_EVENTS),
+            "max_events",
+            1,
+            MAX_EVENTS,
         )
-        max_events = int(arguments.get("max_events", 100))
-        time_window = int(arguments.get("time_window_minutes", 1440))
+        time_window = self._bounded_int(
+            arguments.get("time_window_minutes", DEFAULT_TIME_WINDOW_MINUTES),
+            "time_window_minutes",
+            1,
+            MAX_TIME_WINDOW_MINUTES,
+        )
         return (
             f"SELECT {select_fields} FROM events "
             f"WHERE INOFFENSE({int(arguments['offense_id'])}) "
             f"ORDER BY starttime DESC LIMIT {max_events} LAST {time_window} MINUTES"
         )
+
+    @staticmethod
+    def _normalize_select_fields(raw_fields: Any) -> str:
+        """Return a SELECT field list constrained to safe event fields."""
+        if not raw_fields:
+            return ", ".join(DEFAULT_EVENT_FIELDS)
+
+        requested = [field.strip() for field in str(raw_fields).split(",") if field.strip()]
+        if not requested:
+            return ", ".join(DEFAULT_EVENT_FIELDS)
+
+        invalid = [field for field in requested if field not in ALLOWED_EVENT_FIELDS]
+        if invalid:
+            raise ValueError(f"Unsupported Ariel event fields: {invalid}")
+
+        return ", ".join(requested)
+
+    @staticmethod
+    def _bounded_int(value: Any, name: str, minimum: int, maximum: int) -> int:
+        """Parse an integer argument and enforce hard bounds."""
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be an integer") from exc
+        if parsed < minimum or parsed > maximum:
+            raise ValueError(f"{name} must be between {minimum} and {maximum}")
+        return parsed
 
     async def _validate_aql(self, query_expression: str) -> Dict[str, Any]:
         response = await self.client.post(

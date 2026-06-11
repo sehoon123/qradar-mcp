@@ -74,6 +74,7 @@ ENDPOINT_SPECS: Dict[str, EndpointSpec] = {
     "GetArielSearchStatusTool": _spec("GetArielSearchStatusTool", "get_ariel_search_status", "ariel", "GET", "/ariel/searches/{search_id}"),
     "GetArielSearchResultsTool": _spec("GetArielSearchResultsTool", "get_ariel_search_results", "ariel", "GET", "/ariel/searches/{search_id}/results"),
     "DeleteArielSearchTool": _spec("DeleteArielSearchTool", "delete_ariel_search", "ariel", "DELETE", "/ariel/searches/{search_id}", read_only=False, side_effect="transient_search_job_delete"),
+    "CancelArielSearchTool": _spec("CancelArielSearchTool", "cancel_ariel_search", "ariel", "POST", "/ariel/searches/{search_id}", side_effect="transient_search_job_cancel"),
     "ListSavedSearchesTool": _spec("ListSavedSearchesTool", "list_saved_searches", "ariel", "GET", "/ariel/saved_searches"),
     "GetSavedSearchTool": _spec("GetSavedSearchTool", "get_saved_search", "ariel", "GET", "/ariel/saved_searches/{id}"),
     "DeleteSavedSearchTool": _spec("DeleteSavedSearchTool", "delete_saved_search", "ariel", "DELETE", "/ariel/saved_searches/{id}", read_only=False),

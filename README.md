@@ -11,19 +11,22 @@ read-only.
 
 The server exposes QRadar data to MCP clients through FastMCP tools. It can
 query offenses, Ariel search data, saved searches, assets, log sources, rules,
-system metadata, QID/category metadata, health data, API discovery metadata,
-forensics cases, QVM data, and composite investigation context.
+QID/category metadata, API discovery metadata, and composite investigation
+context. Additional system, config, health, forensics, and QVM tool
+implementations exist but are disabled in the default SOC read-only profile.
 
 This branch keeps QRadar data mutation disabled by default:
 
 - `GET` tools are enabled by default.
 - `DELETE` is disabled.
 - Non-allowlisted `POST` tools are disabled.
-- A limited set of non-mutating or transient-search `POST` tools is explicitly
-  allowlisted:
-  - `CreateArielSearchTool` creates a transient Ariel search job.
+- A limited set of non-mutating or bounded transient-search `POST` tools is
+  explicitly allowlisted:
   - `ValidateAQLTool` validates AQL without changing QRadar data.
   - `InvestigateOffenseEventsTool` runs a bounded offense event search workflow.
+  - Raw `CreateArielSearchTool` and `CancelArielSearchTool` implementations are
+    available for explicitly enabled operator profiles, but not the default
+    profile.
 - A runtime compatibility gate checks the connected QRadar console's
   `/help/versions` and `/help/endpoints` catalog before calling newly added
   tools. The intended compatibility baseline is QRadar API 24.0+.
@@ -45,7 +48,7 @@ qradar-mcp/
 
 ## Tool Coverage
 
-The adapter currently tracks 121 tool implementations. The default
+The adapter currently tracks 122 tool implementations. The default
 `feature_toggles.json` profile registers the read-only-safe subset and skips
 QRadar-mutating tools before they are imported as registration candidates.
 
@@ -57,17 +60,12 @@ Enabled read-only areas include:
 - Assets and asset properties
 - Log sources and log source types
 - Analytics rules, building blocks, and custom actions
-- System and access metadata
-- Network hierarchy, domains, regex properties, and calculated properties
 - QID records, DSM event mappings, and event categories
-- Health data summaries and health metrics
 - QRadar API endpoint, version, and resource discovery
-- Forensics cases, capture recoveries, and recovery tasks
-- QVM vulnerabilities, assets, filters, saved searches, and vuln-instance result workflows
 - Composite offense investigation context and Ariel event evidence workflow
 
-Network service tools are present but disabled by default in the read-only local
-profile.
+System/config metadata, health metrics, forensics, QVM, and network service
+tools are present but disabled by default in the read-only local profile.
 
 ## Local Python Setup
 
@@ -78,7 +76,6 @@ Use this path when Docker is not available.
 ```bash
 git clone https://github.com/sehoon123/qradar-mcp.git
 cd qradar-mcp
-git checkout read-only-composite-tools
 ```
 
 ### 2. Create a virtual environment
@@ -259,10 +256,11 @@ Important default settings in this fork:
   "verb_toggles": {
     "GET": true,
     "POST": false,
-    "DELETE": false
+    "DELETE": false,
+    "PUT": false,
+    "PATCH": false
   },
   "read_only_post_allowlist": [
-    "CreateArielSearchTool",
     "ValidateAQLTool",
     "InvestigateOffenseEventsTool"
   ]
@@ -329,8 +327,9 @@ Permission and module expectations vary by console version and deployment:
 | Forensics | `/forensics/*` | Forensics license/module and case read access |
 
 The default read-only profile still allowlists transient `POST` calls for AQL
-validation, Ariel search creation, and the composite Ariel evidence workflow.
-These create or inspect short-lived search jobs but do not mutate QRadar data.
+validation and the bounded composite Ariel evidence workflow. The raw Ariel
+search creation/cancel tools are disabled by default and should be exposed only
+in an explicit operator profile.
 The REST client retries only explicitly safe POST endpoints such as AQL
 validation; Ariel search creation is not automatically retried because it may
 already have created a QRadar search job before a timeout is observed.

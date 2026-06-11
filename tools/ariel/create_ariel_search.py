@@ -92,6 +92,11 @@ class CreateArielSearchTool(MCPTool):
         # Build query parameters - QRadar Ariel API expects QUERY parameters even for POST
         params = {}
         if query_expression:
+            validation = await self._validate_aql(query_expression)
+            if not validation["valid"]:
+                return self.create_error_response(
+                    f"Error: AQL validation failed before search creation: {validation['details']}"
+                )
             params["query_expression"] = query_expression
         else:
             params["saved_search_id"] = saved_search_id
@@ -101,3 +106,17 @@ class CreateArielSearchTool(MCPTool):
         response.raise_for_status()
         search_data = response.json()
         return self.create_success_response(json.dumps(search_data, indent=2))
+
+    async def _validate_aql(self, query_expression: str) -> Dict[str, Any]:
+        """Validate AQL before creating a search job."""
+        response = await self.client.post(
+            "ariel/validators/aql",
+            params={"query_expression": query_expression},
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return {"valid": True, "details": data, "warnings": data.get("warnings", [])}
+        if response.status_code == 422:
+            return {"valid": False, "details": response.text}
+        response.raise_for_status()
+        return {"valid": False, "details": response.text}

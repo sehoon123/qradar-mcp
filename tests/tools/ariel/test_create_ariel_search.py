@@ -56,6 +56,15 @@ def mock_search_response():
     }
 
 
+@pytest.fixture
+def mock_validation_response():
+    """Mock successful AQL validation response."""
+    return {
+        "valid": True,
+        "warnings": [],
+    }
+
+
 class TestCreateArielSearchToolProperties:
     """Test tool properties."""
 
@@ -82,13 +91,14 @@ class TestCreateArielSearchWithQueryExpression:
     """Test creating searches with AQL query expressions."""
 
     @pytest.mark.asyncio
-    async def test_create_search_with_simple_query(self, tool, mock_search_response):
+    async def test_create_search_with_simple_query(self, tool, mock_search_response, mock_validation_response):
         """Test creating a search with a simple AQL query."""
         mock_request = httpx.Request("POST", "http://test.com")
+        mock_validation = httpx.Response(200, json=mock_validation_response, request=mock_request)
         mock_response = httpx.Response(201, json=mock_search_response, request=mock_request)
 
         tool.client = AsyncMock()
-        tool.client.post = AsyncMock(return_value=mock_response)
+        tool.client.post = AsyncMock(side_effect=[mock_validation, mock_response])
 
         result = await tool.execute({
             "query_expression": "SELECT sourceip FROM events LAST 1 HOURS"
@@ -99,13 +109,18 @@ class TestCreateArielSearchWithQueryExpression:
         assert content["search_id"] == "s123"
         assert content["status"] == "WAIT"
 
-        tool.client.post.assert_called_once_with(
+        assert tool.client.post.call_count == 2
+        tool.client.post.assert_any_call(
+            "ariel/validators/aql",
+            params={"query_expression": "SELECT sourceip FROM events LAST 1 HOURS"}
+        )
+        tool.client.post.assert_any_call(
             "ariel/searches",
             params={"query_expression": "SELECT sourceip FROM events LAST 1 HOURS"}
         )
 
     @pytest.mark.asyncio
-    async def test_create_search_with_complex_query(self, tool, mock_search_response):
+    async def test_create_search_with_complex_query(self, tool, mock_search_response, mock_validation_response):
         """Test creating a search with a complex AQL query."""
         complex_query = (
             "SELECT sourceip, destinationip, qid FROM events "
@@ -115,10 +130,11 @@ class TestCreateArielSearchWithQueryExpression:
         mock_search_response["query_string"] = complex_query
 
         mock_request = httpx.Request("POST", "http://test.com")
+        mock_validation = httpx.Response(200, json=mock_validation_response, request=mock_request)
         mock_response = httpx.Response(201, json=mock_search_response, request=mock_request)
 
         tool.client = AsyncMock()
-        tool.client.post = AsyncMock(return_value=mock_response)
+        tool.client.post = AsyncMock(side_effect=[mock_validation, mock_response])
 
         result = await tool.execute({"query_expression": complex_query})
 
@@ -127,20 +143,21 @@ class TestCreateArielSearchWithQueryExpression:
         assert content["query_string"] == complex_query
 
     @pytest.mark.asyncio
-    async def test_create_search_with_time_range(self, tool, mock_search_response):
+    async def test_create_search_with_time_range(self, tool, mock_search_response, mock_validation_response):
         """Test creating a search with specific time range."""
         query = "SELECT * FROM events START '2024-01-01 00:00' STOP '2024-01-02 00:00'"
 
         mock_request = httpx.Request("POST", "http://test.com")
+        mock_validation = httpx.Response(200, json=mock_validation_response, request=mock_request)
         mock_response = httpx.Response(201, json=mock_search_response, request=mock_request)
 
         tool.client = AsyncMock()
-        tool.client.post = AsyncMock(return_value=mock_response)
+        tool.client.post = AsyncMock(side_effect=[mock_validation, mock_response])
 
         result = await tool.execute({"query_expression": query})
 
         assert result.get("isError") is not True
-        tool.client.post.assert_called_once()
+        assert tool.client.post.call_count == 2
 
 
 class TestCreateArielSearchWithSavedSearchId:
@@ -205,6 +222,24 @@ class TestCreateArielSearchValidation:
 
         assert result["isError"] is True
         assert "mutually exclusive" in result["content"][0]["text"].lower()
+
+    @pytest.mark.asyncio
+    async def test_query_validation_failure_prevents_search_creation(self, tool):
+        """Test invalid AQL is not submitted to the search creation endpoint."""
+        mock_request = httpx.Request("POST", "http://test.com")
+        mock_validation = httpx.Response(422, text="Invalid AQL", request=mock_request)
+
+        tool.client = AsyncMock()
+        tool.client.post = AsyncMock(return_value=mock_validation)
+
+        result = await tool.execute({"query_expression": "SELECT * FORM events LAST 1 HOURS"})
+
+        assert result["isError"] is True
+        assert "aql validation failed" in result["content"][0]["text"].lower()
+        tool.client.post.assert_called_once_with(
+            "ariel/validators/aql",
+            params={"query_expression": "SELECT * FORM events LAST 1 HOURS"}
+        )
 
 
 class TestCreateArielSearchErrorHandling:
@@ -324,13 +359,14 @@ class TestCreateArielSearchResponseFormat:
     """Test response format and content."""
 
     @pytest.mark.asyncio
-    async def test_response_contains_search_id(self, tool, mock_search_response):
+    async def test_response_contains_search_id(self, tool, mock_search_response, mock_validation_response):
         """Test that response contains search_id."""
         mock_request = httpx.Request("POST", "http://test.com")
+        mock_validation = httpx.Response(200, json=mock_validation_response, request=mock_request)
         mock_response = httpx.Response(201, json=mock_search_response, request=mock_request)
 
         tool.client = AsyncMock()
-        tool.client.post = AsyncMock(return_value=mock_response)
+        tool.client.post = AsyncMock(side_effect=[mock_validation, mock_response])
 
         result = await tool.execute({"query_expression": "SELECT * FROM events"})
 
@@ -339,13 +375,14 @@ class TestCreateArielSearchResponseFormat:
         assert content["search_id"] == "s123"
 
     @pytest.mark.asyncio
-    async def test_response_contains_status(self, tool, mock_search_response):
+    async def test_response_contains_status(self, tool, mock_search_response, mock_validation_response):
         """Test that response contains status."""
         mock_request = httpx.Request("POST", "http://test.com")
+        mock_validation = httpx.Response(200, json=mock_validation_response, request=mock_request)
         mock_response = httpx.Response(201, json=mock_search_response, request=mock_request)
 
         tool.client = AsyncMock()
-        tool.client.post = AsyncMock(return_value=mock_response)
+        tool.client.post = AsyncMock(side_effect=[mock_validation, mock_response])
 
         result = await tool.execute({"query_expression": "SELECT * FROM events"})
 
@@ -354,13 +391,14 @@ class TestCreateArielSearchResponseFormat:
         assert content["status"] in ["WAIT", "EXECUTE", "SORTING", "COMPLETED", "CANCELED", "ERROR"]
 
     @pytest.mark.asyncio
-    async def test_response_json_formatted(self, tool, mock_search_response):
+    async def test_response_json_formatted(self, tool, mock_search_response, mock_validation_response):
         """Test that response is properly formatted JSON."""
         mock_request = httpx.Request("POST", "http://test.com")
+        mock_validation = httpx.Response(200, json=mock_validation_response, request=mock_request)
         mock_response = httpx.Response(201, json=mock_search_response, request=mock_request)
 
         tool.client = AsyncMock()
-        tool.client.post = AsyncMock(return_value=mock_response)
+        tool.client.post = AsyncMock(side_effect=[mock_validation, mock_response])
 
         result = await tool.execute({"query_expression": "SELECT * FROM events"})
 

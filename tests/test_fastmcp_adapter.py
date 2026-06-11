@@ -400,7 +400,7 @@ class TestRegisterAllTools:
         return FeatureToggleManager(str(config_file))
 
     def test_all_tools_registered_when_all_enabled(self, all_enabled_config):
-        """Test that all 121 tools are registered when all toggles are enabled."""
+        """Test that all 122 tools are registered when all toggles are enabled."""
         from qradar_mcp.tools.fastmcp_adapter import register_all_tools
 
         mock_mcp = Mock()
@@ -409,8 +409,8 @@ class TestRegisterAllTools:
 
         registered_tools, skipped_tools = register_all_tools(mock_mcp, all_enabled_config, mock_qradar_client)
 
-        # Should register all 121 tools
-        assert len(registered_tools) == 121
+        # Should register all 122 tools
+        assert len(registered_tools) == 122
         assert len(skipped_tools) == 0
 
     def test_returns_tuple(self, all_enabled_config):
@@ -441,7 +441,7 @@ class TestRegisterAllTools:
         # Should have some registered and some skipped
         assert len(registered_tools) > 0
         assert len(skipped_tools) > 0
-        assert len(registered_tools) + len(skipped_tools) == 121
+        assert len(registered_tools) + len(skipped_tools) == 122
 
     def test_delete_verb_disabled_skips_delete_tools(self, some_disabled_config):
         """Test that tools with DELETE verb are skipped when DELETE is disabled."""
@@ -513,8 +513,8 @@ class TestRegisterAllTools:
         # No overlap between registered and skipped
         assert len(registered_names & skipped_names) == 0
 
-        # All 121 tools accounted for
-        assert len(registered_names | skipped_names) == 121
+        # All 122 tools accounted for
+        assert len(registered_names | skipped_names) == 122
 
     def test_read_only_mode_excludes_mutating_registration_candidates(self, tmp_path):
         """Test read-only mode does not import/register QRadar-mutating tools."""
@@ -547,7 +547,6 @@ class TestRegisterAllTools:
                 "qvm": true
             },
             "read_only_post_allowlist": [
-                "CreateArielSearchTool",
                 "ValidateAQLTool",
                 "InvestigateOffenseEventsTool"
             ],
@@ -586,7 +585,6 @@ class TestRegisterAllTools:
 
         registered_non_get = {type(tool).__name__ for tool in registered_tools if tool.http_verb != "GET"}
         assert registered_non_get == {
-            "CreateArielSearchTool",
             "ValidateAQLTool",
             "InvestigateOffenseEventsTool",
         }

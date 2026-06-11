@@ -135,3 +135,10 @@ def test_p2_composite_ariel_workflow_spec_present():
     assert ("GET", "/ariel/searches/{search_id}/metadata") in spec.required_endpoints
     assert spec.read_only is True
     assert spec.side_effect == "transient_search_job"
+
+
+def test_ariel_cancel_search_spec_present():
+    spec = ENDPOINT_SPECS["CancelArielSearchTool"]
+    assert spec.required_endpoints == (("POST", "/ariel/searches/{search_id}"),)
+    assert spec.read_only is True
+    assert spec.side_effect == "transient_search_job_cancel"

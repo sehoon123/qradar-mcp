@@ -4,7 +4,9 @@
   "verb_toggles": {
     "GET": true,
     "POST": false,
-    "DELETE": false
+    "DELETE": false,
+    "PUT": false,
+    "PATCH": false
   },
   "group_toggles": {
     "offense": true,
@@ -13,19 +15,18 @@
     "asset": true,
     "log_source": true,
     "analytics": true,
-    "system": true,
-    "config": true,
+    "system": false,
+    "config": false,
     "data_classification": true,
-    "health_data": true,
+    "health_data": false,
     "help": true,
     "services": false,
     "composite": true,
-    "forensics": true,
-    "qvm": true
+    "forensics": false,
+    "qvm": false
   },
   "per_tool_toggles": {},
   "read_only_post_allowlist": [
-    "CreateArielSearchTool",
     "ValidateAQLTool",
     "InvestigateOffenseEventsTool"
   ],

@@ -17,8 +17,9 @@
 Safety checks for the read-only POST allowlist and the new read-only tools.
 
 These tests guard the safety contract for the read-only fork:
-  * Only the explicitly allowlisted, non-mutating POST tools (Ariel search
-    creation / validation) may run while read_only_mode is enabled.
+  * Only the explicitly allowlisted, non-mutating or bounded POST tools
+    (AQL validation / composite evidence workflow) may run while
+    read_only_mode is enabled.
   * Mutating Ariel tools (DELETE) must stay disabled.
   * Every newly added data_classification / config tool is GET-only.
 """
@@ -127,30 +128,37 @@ def test_allowlist_contains_only_read_only_posts():
     config = json.loads((REPO_ROOT / "feature_toggles.json").read_text(encoding="utf-8"))
     allowlist = config.get("read_only_post_allowlist", [])
 
-    # The non-mutating Ariel POST tools must be allowlisted.
-    assert "CreateArielSearchTool" in allowlist
+    # Only bounded/validation POST tools are allowlisted by default.
+    assert "CreateArielSearchTool" not in allowlist
     assert "ValidateAQLTool" in allowlist
     assert "InvestigateOffenseEventsTool" in allowlist
 
     # Mutating (DELETE) tools must never be allowlisted.
     assert "DeleteArielSearchTool" not in allowlist
     assert "DeleteSavedSearchTool" not in allowlist
+    assert "CancelArielSearchTool" not in allowlist
 
     # POST verb toggle stays off; the allowlist is the only escape hatch.
     assert config["read_only_mode"] is True
     assert config["verb_toggles"]["POST"] is False
     assert config["verb_toggles"]["DELETE"] is False
+    assert config["verb_toggles"]["PUT"] is False
+    assert config["verb_toggles"]["PATCH"] is False
 
-    # Groups the new tools live in must be enabled.
+    # SOC read-only defaults keep core investigation groups enabled.
     assert config["group_toggles"]["ariel"] is True
     assert config["group_toggles"]["data_classification"] is True
-    assert config["group_toggles"]["health_data"] is True
     assert config["group_toggles"]["help"] is True
     assert config["group_toggles"]["offense"] is True
     assert config["group_toggles"]["reference_data"] is True
-    assert config["group_toggles"]["qvm"] is True
-    assert config["group_toggles"]["forensics"] is True
     assert config["group_toggles"]["composite"] is True
+
+    # More sensitive optional groups stay disabled unless an operator opts in.
+    assert config["group_toggles"]["system"] is False
+    assert config["group_toggles"]["config"] is False
+    assert config["group_toggles"]["health_data"] is False
+    assert config["group_toggles"]["qvm"] is False
+    assert config["group_toggles"]["forensics"] is False
 
 
 def _fake_tool(class_name, verb, group):
@@ -173,7 +181,6 @@ def test_manager_enforces_allowlist(tmp_path):
         "group_toggles": {"ariel": True, "offense": True, "reference_data": True, "composite": True},
         "per_tool_toggles": {},
         "read_only_post_allowlist": [
-            "CreateArielSearchTool",
             "ValidateAQLTool",
             "InvestigateOffenseEventsTool",
         ],
@@ -184,9 +191,10 @@ def test_manager_enforces_allowlist(tmp_path):
     manager = FeatureToggleManager(config_path=str(config_path))
 
     # Allowlisted, non-mutating POST tools -> enabled (group must be on).
-    assert manager.is_tool_enabled(_fake_tool("CreateArielSearchTool", "POST", "ariel")) is True
+    assert manager.is_tool_enabled(_fake_tool("CreateArielSearchTool", "POST", "ariel")) is False
     assert manager.is_tool_enabled(_fake_tool("ValidateAQLTool", "POST", "ariel")) is True
     assert manager.is_tool_enabled(_fake_tool("InvestigateOffenseEventsTool", "POST", "composite")) is True
+    assert manager.is_tool_enabled(_fake_tool("CancelArielSearchTool", "POST", "ariel")) is False
 
     # Mutating Ariel tool (DELETE) -> blocked even though group is enabled.
     assert manager.is_tool_enabled(_fake_tool("DeleteArielSearchTool", "DELETE", "ariel")) is False
@@ -195,7 +203,7 @@ def test_manager_enforces_allowlist(tmp_path):
     assert manager.is_tool_enabled(_fake_tool("CreateReferenceSetTool", "POST", "reference_data")) is False
 
     # Allowlisted POST tool whose group is disabled -> blocked.
-    assert manager.is_tool_enabled(_fake_tool("CreateArielSearchTool", "POST", "system")) is False
+    assert manager.is_tool_enabled(_fake_tool("ValidateAQLTool", "POST", "system")) is False
 
     # Ordinary GET tool -> unaffected.
     assert manager.is_tool_enabled(_fake_tool("ListOffensesTool", "GET", "offense")) is True

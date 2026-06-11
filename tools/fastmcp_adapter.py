@@ -219,6 +219,7 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
     from .ariel.list_ariel_lookups import ListArielLookupsTool
     from .ariel.get_ariel_lookup import GetArielLookupTool
     from .ariel.get_ariel_search_metadata import GetArielSearchMetadataTool
+    from .ariel.cancel_ariel_search import CancelArielSearchTool
 
     from .reference_data.list_reference_sets import ListReferenceSets
     from .reference_data.get_reference_set import GetReferenceSetTool
@@ -343,6 +344,7 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
         ListArielLookupsTool(),
         GetArielLookupTool(),
         GetArielSearchMetadataTool(),
+        CancelArielSearchTool(),
 
         # Reference data tools - Sets (read-only)
         ListReferenceSets(),

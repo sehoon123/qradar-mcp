@@ -258,10 +258,9 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
             return self._raise_for_retryable_status(response)
         return response
 
-    @retry_on_failure_async(max_attempts=3, backoff_factor=2.0)
     async def delete(self, api_path, headers=None, params=None, version=None, timeout=None):  # pylint: disable=too-many-positional-arguments
         """
-        Perform a DELETE request to the QRadar API with automatic retry on transient failures.
+        Perform a DELETE request to the QRadar API without automatic retry.
 
         Args:
             api_path: The API path (e.g., 'ariel/searches/s123')
@@ -290,7 +289,7 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
             timeout=timeout,
             params=params
         )
-        return self._raise_for_retryable_status(response)
+        return response
 
     def _add_headers(self, headers, version=None):
         """
@@ -405,7 +404,7 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
         normalized = hostname.lower()
         if normalized in {'localhost'}:
             return True
-        if normalized.endswith(('.local', '.internal')):
+        if normalized.endswith(('.local', '.internal', '.lan')):
             return True
         try:
             return ip_address(normalized).is_private
