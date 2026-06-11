@@ -19,8 +19,10 @@ Tests for FastMCP Adapter
 Tests the adapter pattern that bridges MCPTool implementations with FastMCP.
 """
 
-import pytest
+import importlib
 from unittest.mock import Mock, patch, AsyncMock
+
+import pytest
 import httpx
 from qradar_mcp.tools.fastmcp_adapter import (
     _json_schema_type_to_python,
@@ -560,6 +562,7 @@ class TestRegisterAllTools:
 
     def test_read_only_mode_excludes_mutating_registration_candidates(self, tmp_path):
         """Test read-only mode does not import/register QRadar-mutating tools."""
+        from qradar_mcp.tools.endpoint_registry import ENDPOINT_SPECS
         from qradar_mcp.tools.fastmcp_adapter import register_all_tools
         from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
 
@@ -597,11 +600,6 @@ class TestRegisterAllTools:
 
         mock_mcp = Mock()
         mock_mcp.tool = Mock(return_value=lambda func: func)
-        registered_tools, skipped_tools = register_all_tools(
-            mock_mcp,
-            FeatureToggleManager(str(config_file)),
-            AsyncMock(),
-        )
 
         mutating_classes = {
             "UpdateOffenseTool",
@@ -622,8 +620,30 @@ class TestRegisterAllTools:
             "DeleteReferenceTable",
             "RemoveFromReferenceTable",
         }
+        mutating_module_paths = {
+            spec.module_path
+            for spec in ENDPOINT_SPECS.values()
+            if not spec.read_only
+        }
+        imported_modules = []
+        real_import_module = importlib.import_module
+
+        def guarded_import_module(name):
+            imported_modules.append(name)
+            if name in mutating_module_paths:
+                raise AssertionError(f"Mutating module should not be imported in read-only mode: {name}")
+            return real_import_module(name)
+
+        with patch("qradar_mcp.tools.fastmcp_adapter.import_module", side_effect=guarded_import_module):
+            registered_tools, skipped_tools = register_all_tools(
+                mock_mcp,
+                FeatureToggleManager(str(config_file)),
+                AsyncMock(),
+            )
+
         candidate_classes = {type(tool).__name__ for tool in registered_tools + skipped_tools}
         assert candidate_classes.isdisjoint(mutating_classes)
+        assert mutating_module_paths.isdisjoint(imported_modules)
 
         registered_non_get = {type(tool).__name__ for tool in registered_tools if tool.http_verb != "GET"}
         assert registered_non_get == {

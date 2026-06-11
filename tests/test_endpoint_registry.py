@@ -4,7 +4,7 @@ import json
 from unittest.mock import AsyncMock, Mock
 
 from qradar_mcp.tools.endpoint_registry import ENDPOINT_SPECS
-from qradar_mcp.tools.fastmcp_adapter import register_all_tools
+from qradar_mcp.tools.fastmcp_adapter import _load_tool_class, register_all_tools
 from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
 
 
@@ -48,6 +48,13 @@ def test_all_registered_tools_have_endpoint_specs(tmp_path):
     assert skipped_tools == []
     registered_class_names = {type(tool).__name__ for tool in registered_tools}
     assert registered_class_names == set(ENDPOINT_SPECS)
+
+
+def test_all_endpoint_specs_resolve_to_tool_classes():
+    """Every EndpointSpec must point to an importable MCPTool class."""
+    for class_name, spec in ENDPOINT_SPECS.items():
+        tool_class = _load_tool_class(spec)
+        assert tool_class.__name__ == class_name
 
 
 def test_p1_read_only_endpoint_specs_present():

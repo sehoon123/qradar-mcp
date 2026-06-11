@@ -291,6 +291,12 @@ For strict read-only operation, keep `read_only_mode` enabled and keep
 Tool outputs default to structured JSON for agent workflows. Tools that expose
 `format_output` return human-readable text only when `format_output=true`.
 
+Tool registration is driven by `tools/endpoint_registry.py`. To add a tool, add
+an `EndpointSpec` entry whose `group`, `tool_name`, and `class_name` resolve to
+`qradar_mcp.tools.<group>.<tool_name>.<class_name>`. The FastMCP adapter loads
+those classes dynamically from the registry and applies read-only filtering
+before importing mutating tool modules.
+
 ## Optional Docker Usage
 
 Docker is not required for local Python mode. If you do use Docker, the compose

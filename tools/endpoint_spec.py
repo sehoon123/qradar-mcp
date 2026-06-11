@@ -57,6 +57,16 @@ class EndpointSpec:  # pylint: disable=too-many-instance-attributes
         """Endpoints that must be exposed by the connected console."""
         return ((self.method, self.path),) + self.additional_required_endpoints
 
+    @property
+    def module_path(self) -> str:
+        """Python module path for the tool implementation."""
+        return f"qradar_mcp.tools.{self.group}.{self.tool_name}"
+
+    @property
+    def class_path(self) -> str:
+        """Fully qualified class path for dynamic imports."""
+        return f"{self.module_path}.{self.class_name}"
+
     def to_compatibility_entry(self) -> Dict:
         """Convert to the legacy compatibility registry entry shape."""
         entry = {
