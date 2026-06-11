@@ -64,6 +64,16 @@ class TestQRadarRestClientInit:
         assert client._local_mode is False
 
     @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    @patch.dict(os.environ, {'QRADAR_HOST': 'http://192.168.1.10'}, clear=True)
+    def test_init_without_config_prefers_qradar_host(self, mock_load_config):
+        """Test env mode accepts QRADAR_HOST as the console URL."""
+        mock_load_config.return_value = None
+
+        client = QRadarRestClient()
+
+        assert client._url == "http://192.168.1.10"
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
     @patch.dict(os.environ, {'FUNCTIONAL_TEST_ENV': '1', 'QRADAR_REST_PROXY': 'http://test-proxy:8080', 'QRADAR_CONSOLE_FQDN': 'test.qradar.com'})
     def test_init_with_env_variables(self, mock_load_config):
         """Test initialization with environment variables."""

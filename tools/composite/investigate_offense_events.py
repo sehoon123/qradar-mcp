@@ -9,6 +9,7 @@ import asyncio
 
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
+from qradar_mcp.tools.ariel.aql_validation import parse_aql_validation_response
 
 
 DEFAULT_EVENT_FIELDS = (
@@ -109,7 +110,6 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
             return self.create_json_response({
                 "offense_id": offense_id,
                 "valid": False,
-                "query_expression": query_expression,
                 "validation": validation,
             })
 
@@ -206,13 +206,9 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
             "/ariel/validators/aql",
             params={"query_expression": query_expression},
         )
-        if response.status_code == 200:
-            data = response.json()
-            return {"valid": True, "details": data, "warnings": data.get("warnings", [])}
-        if response.status_code == 422:
-            return {"valid": False, "details": response.json()}
-        response.raise_for_status()
-        return {"valid": False, "details": response.text}
+        if response.status_code >= 500:
+            response.raise_for_status()
+        return parse_aql_validation_response(response)
 
     async def _create_search(self, query_expression: str) -> Dict[str, Any]:
         response = await self.client.post(

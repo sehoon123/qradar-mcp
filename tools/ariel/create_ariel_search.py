@@ -23,6 +23,7 @@ from typing import Dict, Any
 import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
+from qradar_mcp.tools.ariel.aql_validation import parse_aql_validation_response
 
 
 class CreateArielSearchTool(MCPTool):
@@ -95,7 +96,7 @@ class CreateArielSearchTool(MCPTool):
             validation = await self._validate_aql(query_expression)
             if not validation["valid"]:
                 return self.create_error_response(
-                    f"Error: AQL validation failed before search creation: {validation['details']}"
+                    f"Error: AQL validation failed before search creation: {validation['messages']}"
                 )
             params["query_expression"] = query_expression
         else:
@@ -113,10 +114,6 @@ class CreateArielSearchTool(MCPTool):
             "ariel/validators/aql",
             params={"query_expression": query_expression},
         )
-        if response.status_code == 200:
-            data = response.json()
-            return {"valid": True, "details": data, "warnings": data.get("warnings", [])}
-        if response.status_code == 422:
-            return {"valid": False, "details": response.text}
-        response.raise_for_status()
-        return {"valid": False, "details": response.text}
+        if response.status_code >= 500:
+            response.raise_for_status()
+        return parse_aql_validation_response(response)

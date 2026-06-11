@@ -82,7 +82,7 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
             self._local_mode = True
         else:
             # QRadar App mode
-            self._url = os.getenv('QRADAR_CONSOLE_FQDN')
+            self._url = os.getenv('QRADAR_HOST') or os.getenv('QRADAR_CONSOLE_FQDN')
             self._sec_token = None
             self._csrf_token = None
             self._authorized_service_token = None

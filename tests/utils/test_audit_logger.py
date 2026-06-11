@@ -175,7 +175,39 @@ class TestAuditLogger:
 
         assert audit_entry['success'] is False
         assert 'error' in audit_entry
-        assert audit_entry['error']['message'] == 'Tool execution failed'
+        assert audit_entry['error']['message_redacted'] is True
+        assert audit_entry['error']['message_length'] == len('Tool execution failed')
+        assert 'message_sha256' in audit_entry['error']
+
+    @patch('qradar_mcp.utils.audit_logger.log_mcp')
+    @patch('qradar_mcp.utils.audit_logger.AuditLogger._get_audit_context')
+    def test_log_tool_execution_failure_redacts_raw_aql_from_result(self, mock_context, mock_log_mcp):
+        """Test failed result text cannot leak raw AQL into audit logs."""
+        mock_context.return_value = {
+            'timestamp': '2024-01-01T00:00:00Z',
+            'timestamp_unix': 1704067200.0
+        }
+
+        raw_query = "SELECT * FROM events WHERE username='alice'"
+        result = {
+            'isError': True,
+            'content': [{'text': f'AQL validation failed. Query: {raw_query}'}]
+        }
+
+        AuditLogger.log_tool_execution(
+            tool_name='ValidateAQLTool',
+            arguments={'query_expression': raw_query},
+            result=result,
+            duration_seconds=0.5
+        )
+
+        log_message = mock_log_mcp.call_args[0][0]
+        audit_json = log_message.replace('AUDIT: ', '')
+        audit_entry = json.loads(audit_json)
+
+        assert raw_query not in audit_json
+        assert audit_entry['arguments']['query_expression']['redacted'] is True
+        assert audit_entry['error']['message_redacted'] is True
 
     @patch('qradar_mcp.utils.audit_logger.log_mcp')
     @patch('qradar_mcp.utils.audit_logger.AuditLogger._get_audit_context')

@@ -279,6 +279,7 @@ config loader expects it inside the container.
 
 ```bash
 cp config.example.json config.json
+cp .env.example .env
 docker-compose up -d
 ```
 
@@ -294,12 +295,16 @@ Manual Docker example:
 docker build -t qradar-mcp:latest .
 docker run -d \
   --name qradar-mcp-server \
-  -p 5001:5000 \
+  -p 127.0.0.1:5001:5000 \
   -e MCP_HOST=0.0.0.0 \
   -e MCP_PORT=5000 \
   -v $(pwd)/config.json:/opt/app-root/config.json:ro \
   qradar-mcp:latest
 ```
+
+The compose example also publishes to `127.0.0.1:5001` by default. Use a
+reverse proxy, VPN, or firewall allowlist before exposing the MCP server to a
+shared network.
 
 The image and compose file include a healthcheck against `/healthz`. Use
 `/readyz` when an orchestrator should also verify that QRadar host settings and

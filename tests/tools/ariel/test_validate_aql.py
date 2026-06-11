@@ -95,6 +95,31 @@ class TestValidateAQLExecution:
         assert 'Warning 2' in result['content'][0]['text']
 
     @pytest.mark.asyncio
+    async def test_execute_http_200_with_error_severity_is_invalid(self):
+        """Test HTTP 200 validator errors are treated as invalid AQL."""
+        tool = ValidateAQLTool()
+        mock_response = httpx.Response(
+            status_code=200,
+            json={
+                'error_messages': [
+                    {'severity': 'ERROR', 'message': 'Unexpected token'}
+                ]
+            },
+            request=httpx.Request("POST", "http://test")
+        )
+        tool.client = AsyncMock()
+        tool.client.post = AsyncMock(return_value=mock_response)
+
+        result = await tool.execute({
+            'query_expression': 'SELECT * FORM events'
+        })
+
+        assert result['content'][0]['type'] == 'text'
+        assert '✗' in result['content'][0]['text']
+        assert 'Unexpected token' in result['content'][0]['text']
+        assert result['isError'] is True
+
+    @pytest.mark.asyncio
     async def test_execute_invalid_query(self):
         """Test executing with an invalid AQL query."""
         # Setup mock
@@ -163,6 +188,23 @@ class TestValidateAQLExecution:
         assert result['content'][0]['type'] == 'text'
         assert '500' in result['content'][0]['text']
         assert result['isError'] is True
+
+    @pytest.mark.asyncio
+    async def test_response_does_not_echo_raw_query(self):
+        """Test validator output does not return raw AQL text."""
+        tool = ValidateAQLTool()
+        mock_response = httpx.Response(
+            status_code=200,
+            json={},
+            request=httpx.Request("POST", "http://test")
+        )
+        tool.client = AsyncMock()
+        tool.client.post = AsyncMock(return_value=mock_response)
+
+        query = "SELECT * FROM events WHERE username='alice'"
+        result = await tool.execute({'query_expression': query})
+
+        assert query not in result['content'][0]['text']
 
 
 class TestValidateAQLValidation:

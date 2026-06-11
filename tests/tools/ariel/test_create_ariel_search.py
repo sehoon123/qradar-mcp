@@ -241,6 +241,32 @@ class TestCreateArielSearchValidation:
             params={"query_expression": "SELECT * FORM events LAST 1 HOURS"}
         )
 
+    @pytest.mark.asyncio
+    async def test_query_validation_error_severity_prevents_search_creation(self, tool):
+        """Test HTTP 200 validator errors still prevent search creation."""
+        mock_request = httpx.Request("POST", "http://test.com")
+        mock_validation = httpx.Response(
+            200,
+            json={
+                "error_messages": [
+                    {"severity": "ERROR", "message": "Unexpected token"}
+                ]
+            },
+            request=mock_request,
+        )
+
+        tool.client = AsyncMock()
+        tool.client.post = AsyncMock(return_value=mock_validation)
+
+        result = await tool.execute({"query_expression": "SELECT * FORM events LAST 1 HOURS"})
+
+        assert result["isError"] is True
+        assert "aql validation failed" in result["content"][0]["text"].lower()
+        tool.client.post.assert_called_once_with(
+            "ariel/validators/aql",
+            params={"query_expression": "SELECT * FORM events LAST 1 HOURS"}
+        )
+
 
 class TestCreateArielSearchErrorHandling:
     """Test error handling for various API responses."""

@@ -23,6 +23,10 @@ from typing import Dict, Any
 
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
+from qradar_mcp.tools.ariel.aql_validation import (
+    format_validation_messages,
+    parse_aql_validation_response,
+)
 
 
 class ValidateAQLTool(MCPTool):
@@ -90,54 +94,28 @@ Validation prevents wasted searches and provides helpful error messages with sug
             params={'query_expression': query_expression}
         )
 
-        if response.status_code == 200:
-            # Query is valid
-            result = response.json()
+        validation = parse_aql_validation_response(response)
+        messages = validation.get("messages", [])
+        formatted_messages = format_validation_messages(messages)
 
-            # Check if there are any warnings
-            warnings = result.get('warnings', [])
-            warning_text = ""
-            if warnings:
-                warning_text = "\n\nWarnings:\n" + "\n".join(f"- {w}" for w in warnings)
-
+        if validation["valid"]:
+            warning_text = f"\n\nWarnings:\n{formatted_messages}" if messages else ""
             return {
                 "content": [
                     {
                         "type": "text",
-                        "text": f"✓ AQL query is valid{warning_text}\n\nQuery: {query_expression}"
+                        "text": f"✓ AQL query is valid{warning_text}"
                     }
                 ]
             }
 
-        if response.status_code == 422:
-            # Query has validation errors
-            error_data = response.json()
-            error_message = error_data.get('message', 'Unknown validation error')
-
-            # Extract detailed error information if available
-            details = error_data.get('details', {})
-            error_text = f"✗ AQL validation failed:\n\n{error_message}"
-
-            if details:
-                error_text += f"\n\nDetails: {details}"
-
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"{error_text}\n\nQuery: {query_expression}"
-                    }
-                ],
-                "isError": True
-            }
-
-        # Unexpected error
+        error_text = formatted_messages or f"HTTP {response.status_code}"
         return {
             "content": [
                 {
                     "type": "text",
-                    "text": f"Error validating AQL query: {response.status_code} - {response.text}"
+                    "text": f"✗ AQL validation failed:\n\n{error_text}"
                 }
-                ],
-                "isError": True
-            }
+            ],
+            "isError": True
+        }

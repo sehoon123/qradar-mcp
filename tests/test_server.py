@@ -20,10 +20,12 @@ Tests the FastMCP server initialization, factory methods, and resource functions
 """
 
 import pytest
+import httpx
 from unittest.mock import Mock, patch, MagicMock
 from qradar_mcp.server import (
     mcp,
     app,
+    qradar_client,
     get_health_status,
     get_readiness_status,
 )
@@ -84,6 +86,25 @@ class TestMCPServerInitialization:
 
         assert host == "127.0.0.1"
         assert port == 5000
+
+    @pytest.mark.asyncio
+    async def test_health_routes_bypass_qradar_auth_in_asgi_stack(self, monkeypatch):
+        """Test health routes bypass QRadar auth in the actual ASGI app."""
+        async def fail_if_called(*_args, **_kwargs):
+            raise AssertionError("QRadar auth must not be called for health routes")
+
+        monkeypatch.setattr(qradar_client, "identify_user", fail_if_called)
+        monkeypatch.setattr(qradar_client, "identify_authorized_service", fail_if_called)
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+        ) as client:
+            health_response = await client.get("/healthz")
+            ready_response = await client.get("/readyz")
+
+        assert health_response.status_code == 200
+        assert ready_response.status_code in {200, 503}
 
 
 class TestResourceRegistration:

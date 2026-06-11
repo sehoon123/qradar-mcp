@@ -118,6 +118,10 @@ def load_settings(config_data: Optional[dict] = None) -> AppSettings:
     """
     settings = AppSettings.model_validate(config_data or {})
 
+    qradar_host = os.getenv("QRADAR_HOST")
+    if qradar_host:
+        settings.qradar.host = qradar_host
+
     qradar_api_version = os.getenv("QRADAR_API_VERSION")
     if qradar_api_version:
         settings.qradar.api_version = qradar_api_version

@@ -7,14 +7,15 @@ services:
       dockerfile: Dockerfile
     container_name: qradar-mcp-server
     ports:
-      - "5001:5000"
+      - "127.0.0.1:5001:5000"
     environment:
-      # QRadar app framework requirements
+      # QRadar app root
       - APP_ROOT=/opt/app-root/qradar-mcp
-      - QRADAR_CONSOLE_FQDN=https://${QRADAR_HOST}
 
-      # QRadar connection settings
+      # QRadar connection settings. QRADAR_HOST may be a full URL such as
+      # http://192.168.1.10 when QRADAR_ALLOW_PLAIN_HTTP_PRIVATE_NETWORK=true.
       - QRADAR_HOST=${QRADAR_HOST}
+      - QRADAR_ALLOW_PLAIN_HTTP_PRIVATE_NETWORK=${QRADAR_ALLOW_PLAIN_HTTP_PRIVATE_NETWORK:-false}
 
       # Server settings
       - LOG_LEVEL=${LOG_LEVEL:-info}

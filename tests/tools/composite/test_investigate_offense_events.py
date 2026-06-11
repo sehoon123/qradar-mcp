@@ -1,6 +1,9 @@
 """Tests for the offense Ariel event investigation workflow."""
 
 import pytest
+from unittest.mock import AsyncMock
+
+import httpx
 
 from qradar_mcp.tools.composite.investigate_offense_events import InvestigateOffenseEventsTool
 
@@ -50,3 +53,24 @@ def test_build_aql_rejects_expensive_limits(tool):
 
     with pytest.raises(ValueError, match="time_window_minutes must be between 1 and 1440"):
         tool._build_aql({"offense_id": 123, "time_window_minutes": 10080})
+
+
+@pytest.mark.asyncio
+async def test_validate_aql_treats_error_severity_as_invalid(tool):
+    """Test composite workflow honors validator error severity in HTTP 200 responses."""
+    response = httpx.Response(
+        200,
+        json={
+            "error_messages": [
+                {"severity": "ERROR", "message": "Unexpected token"}
+            ]
+        },
+        request=httpx.Request("POST", "http://test"),
+    )
+    tool.client = AsyncMock()
+    tool.client.post = AsyncMock(return_value=response)
+
+    validation = await tool._validate_aql("SELECT * FORM events")
+
+    assert validation["valid"] is False
+    assert validation["messages"][0]["severity"] == "ERROR"

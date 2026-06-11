@@ -21,6 +21,7 @@ Provides comprehensive audit logging for compliance and security.
 
 import json
 import time
+import hashlib
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from .mcp_logger import log_mcp
@@ -129,9 +130,9 @@ class AuditLogger:
         if result.get('isError'):
             content = result.get('content', [{}])
             if content:
-                audit_entry['error'] = {
-                    'message': content[0].get('text', 'Unknown error')
-                }
+                audit_entry['error'] = AuditLogger._redacted_error_message(
+                    content[0].get('text', 'Unknown error')
+                )
 
         # Write to audit log
         AuditLogger._write_audit_log(audit_entry)
@@ -228,6 +229,17 @@ class AuditLogger:
         """
         sanitized = sanitize_for_audit(data)
         return sanitized if isinstance(sanitized, dict) else {}
+
+    @staticmethod
+    def _redacted_error_message(message: Any) -> Dict[str, Any]:
+        """Represent failed tool output without storing raw error text."""
+        message_text = str(message)
+        digest = hashlib.sha256(message_text.encode("utf-8")).hexdigest()
+        return {
+            "message_redacted": True,
+            "message_length": len(message_text),
+            "message_sha256": digest[:16],
+        }
 
     @staticmethod
     def _write_audit_log(audit_entry: Dict[str, Any]):

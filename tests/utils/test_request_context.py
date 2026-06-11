@@ -265,8 +265,10 @@ class TestRequestContextMiddleware:
         assert captured_context['referer'] == 'https://example.com/dashboard'
         assert captured_context['content_type'] == 'application/json'
         assert captured_context['query_params'] == {"filter": "status='OPEN'"}
-        assert 'authorization' in captured_context['headers']
-        assert 'x-custom-header' in captured_context['headers']
+        assert 'authorization' not in captured_context['headers']
+        assert 'x-custom-header' not in captured_context['headers']
+        assert captured_context['headers']['user-agent'] == 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        assert captured_context['headers']['content-type'] == 'application/json'
 
     @pytest.mark.asyncio
     async def test_middleware_clears_context_after_request(self, mock_request, mock_call_next):

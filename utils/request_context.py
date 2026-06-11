@@ -26,6 +26,16 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 
+SAFE_REQUEST_HEADERS = {
+    "accept",
+    "content-type",
+    "traceparent",
+    "tracestate",
+    "user-agent",
+    "x-request-id",
+}
+
+
 # Context variables to store request information for the current request
 _request_method: ContextVar[Optional[str]] = ContextVar('request_method', default=None)
 _request_path: ContextVar[Optional[str]] = ContextVar('request_path', default=None)
@@ -214,7 +224,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     - Referer header
     - Content-Type header
     - Query parameters
-    - All request headers
+    - Safe request headers only
     """
 
     async def dispatch(self, request: Request, call_next):
@@ -236,8 +246,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         # Extract query parameters
         query_params = dict(request.query_params) if request.query_params else {}
 
-        # Extract all headers as a dictionary
-        headers = dict(request.headers) if request.headers else {}
+        # Store only non-sensitive headers in request context. Authentication
+        # tokens are handled by AuthTokenMiddleware and should not live in the
+        # general request context.
+        headers = _safe_request_headers(request.headers)
 
         # Set all request context variables
         set_request_context(
@@ -258,3 +270,15 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         finally:
             # Clean up context after request
             clear_request_context()
+
+
+def _safe_request_headers(headers) -> Dict[str, str]:
+    """Return the request headers that are safe to keep in context."""
+    if not headers:
+        return {}
+
+    return {
+        key: value
+        for key, value in dict(headers).items()
+        if key.lower() in SAFE_REQUEST_HEADERS
+    }

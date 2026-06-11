@@ -57,6 +57,7 @@ def test_load_settings_invalid_server_port_falls_back():
     "os.environ",
     {
         "QRADAR_API_VERSION": "26.0",
+        "QRADAR_HOST": "http://192.168.1.10",
         "QRADAR_VERIFY_SSL": "false",
         "QRADAR_ALLOW_PLAIN_HTTP_PRIVATE_NETWORK": "true",
     },
@@ -72,6 +73,7 @@ def test_load_settings_env_overrides_qradar_runtime_options():
         }
     })
 
+    assert settings.qradar.host == "http://192.168.1.10"
     assert settings.qradar.api_version == "26.0"
     assert settings.qradar.verify_ssl is False
     assert settings.qradar.allow_plain_http_private_network is True

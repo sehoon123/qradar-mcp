@@ -15,9 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Using .dockerignore to exclude sensitive files and unnecessary directories
 COPY . /opt/app-root/qradar-mcp/
 
-# Install the package in editable mode and create non-root user
+# Install pinned dependencies, then install the local package without resolving
+# looser pyproject dependency ranges again.
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e /opt/app-root/qradar-mcp/ && \
+    pip install --no-cache-dir -r /opt/app-root/qradar-mcp/requirements.txt && \
+    pip install --no-cache-dir --no-deps -e /opt/app-root/qradar-mcp/ && \
     useradd -m -u 1001 appuser && \
     chown -R appuser:appuser /opt/app-root && \
     mkdir -p /opt/app-root/logs && \
