@@ -28,6 +28,8 @@ def test_load_settings_secure_defaults():
     assert settings.qradar.api_version is None
     assert settings.server.host == "127.0.0.1"
     assert settings.server.port == 5000
+    assert settings.compatibility.fail_mode == "open"
+    assert settings.auth.identity_probe == "strict"
 
 
 def test_load_settings_reads_qradar_api_version():
@@ -60,6 +62,8 @@ def test_load_settings_invalid_server_port_falls_back():
         "QRADAR_HOST": "http://192.168.1.10",
         "QRADAR_VERIFY_SSL": "false",
         "QRADAR_ALLOW_PLAIN_HTTP_PRIVATE_NETWORK": "true",
+        "QRADAR_COMPATIBILITY_FAIL_MODE": "closed",
+        "QRADAR_AUTH_IDENTITY_PROBE": "permissive",
     },
     clear=True
 )
@@ -77,6 +81,8 @@ def test_load_settings_env_overrides_qradar_runtime_options():
     assert settings.qradar.api_version == "26.0"
     assert settings.qradar.verify_ssl is False
     assert settings.qradar.allow_plain_http_private_network is True
+    assert settings.compatibility.fail_mode == "closed"
+    assert settings.auth.identity_probe == "permissive"
 
 
 def test_parse_bool_handles_common_values():

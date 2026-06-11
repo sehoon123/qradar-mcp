@@ -20,6 +20,12 @@
     "max_connections": 100,
     "timeout": 30.0
   },
+  "compatibility": {
+    "fail_mode": "open"
+  },
+  "auth": {
+    "identity_probe": "strict"
+  },
   "proxy": {
     "port": 8080
   }

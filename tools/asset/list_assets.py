@@ -20,7 +20,6 @@ Lists assets from QRadar asset model with filtering, sorting, and pagination.
 """
 
 from typing import Dict, Any
-import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
 from qradar_mcp.utils.parameters import (
@@ -127,13 +126,13 @@ Note: Use fields parameter to request only necessary fields for better performan
 
         assets = response.json()
 
-        # Format output if requested (default: true)
-        format_output = arguments.get('format_output', True)
+        # Format output only when requested; structured JSON is the default.
+        format_output = arguments.get('format_output', False)
         if format_output and assets:
             formatted = self._format_assets(assets)
             return self.create_success_response(formatted)
 
-        return self.create_success_response(json.dumps(assets, indent=2))
+        return self.create_json_response(assets)
 
     def _format_assets(self, assets: list) -> str:
         """Format assets as human-readable output."""

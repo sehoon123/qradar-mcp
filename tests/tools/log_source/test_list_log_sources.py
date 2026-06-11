@@ -124,11 +124,11 @@ class TestListLogSourcesExecution:
         result = await tool.execute({})
 
         # Verify
-        assert result["content"][0]["type"] == "text"
+        assert result["content"][0]["type"] == "json"
         assert "isError" not in result
-        assert "Log Source ID: 1" in result["content"][0]["text"]
-        assert "Log Source ID: 2" in result["content"][0]["text"]
-        assert "Firewall-01" in result["content"][0]["text"]
+        assert result["content"][0]["json"][0]["id"] == 1
+        assert result["content"][0]["json"][1]["id"] == 2
+        assert result["content"][0]["json"][0]["name"] == "Firewall-01"
 
         # Verify API call
         tool.client.get.assert_called_once()

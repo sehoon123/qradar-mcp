@@ -120,10 +120,13 @@ class TestListOffensesToolExecution:
         assert "Range" in headers
         assert headers["Range"] == "items=0-49"  # Default limit=50, offset=0
 
-        # Verify result
+        # Verify result defaults to structured JSON, not formatted text.
         assert "content" in result
-        assert result["content"][0]["text"] == "Formatted offense list"
+        assert result["content"][0]["type"] == "json"
+        assert result["content"][0]["json"]["count"] == 2
+        assert result["content"][0]["json"]["total_count"] == 100
         assert "isError" not in result
+        mock_format.assert_not_called()
 
     @pytest.mark.asyncio
     @patch('qradar_mcp.tools.offense.list_offenses.format_offense_list')
@@ -314,10 +317,8 @@ class TestListOffensesToolExecution:
 
         await tool.execute({})
 
-        # Verify format_offense_list was called with total_count
-        mock_format.assert_called_once()
-        call_args = mock_format.call_args
-        assert call_args[0][1] == 500  # total_count
+        # Default output is structured JSON, so the formatter is not called.
+        mock_format.assert_not_called()
 
     @pytest.mark.asyncio
     @patch('qradar_mcp.tools.offense.list_offenses.format_offense_list')
@@ -338,10 +339,8 @@ class TestListOffensesToolExecution:
 
         result = await tool.execute({})
 
-        # Verify format_offense_list was called with None for total_count
-        mock_format.assert_called_once()
-        call_args = mock_format.call_args
-        assert call_args[0][1] is None
+        # Default output is structured JSON, so the formatter is not called.
+        mock_format.assert_not_called()
 
         assert "isError" not in result
 

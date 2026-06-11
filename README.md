@@ -48,7 +48,7 @@ qradar-mcp/
 
 ## Tool Coverage
 
-The adapter currently tracks 122 tool implementations. The default
+The adapter currently tracks 123 tool implementations. The default
 `feature_toggles.json` profile registers the read-only-safe subset and skips
 QRadar-mutating tools before they are imported as registration candidates.
 
@@ -62,6 +62,7 @@ Enabled read-only areas include:
 - Analytics rules, building blocks, and custom actions
 - QID records, DSM event mappings, and event categories
 - QRadar API endpoint, version, and resource discovery
+- QRadar deployment diagnostics through `qradar_doctor`
 - Composite offense investigation context and Ariel event evidence workflow
 
 System/config metadata, health metrics, forensics, QVM, and network service
@@ -140,6 +141,12 @@ Recommended local authentication is an authorized service token:
     "host": "127.0.0.1",
     "port": 5000,
     "debug": true
+  },
+  "compatibility": {
+    "fail_mode": "open"
+  },
+  "auth": {
+    "identity_probe": "strict"
   }
 }
 ```
@@ -159,6 +166,12 @@ Notes:
 - `verify_ssl` defaults to `true`. Set it to `false` only for lab or
   self-signed certificate environments.
 - User session auth is also supported with `sec_token` and `csrf_token`.
+- `compatibility.fail_mode` defaults to `open` for lab friendliness. Use
+  `closed` when `/help/versions` and `/help/endpoints` must be available before
+  gated tools run.
+- `auth.identity_probe` defaults to `strict`. `permissive` lets a request with
+  a QRadar token proceed when identity lookup endpoints are unavailable, and
+  `disabled_for_local_config` skips the identity lookup for local config tokens.
 
 ### 5. Run the server
 
@@ -226,6 +239,10 @@ These endpoints bypass QRadar authentication middleware so Docker and
 orchestrator health checks do not depend on QRadar token validity or console
 availability.
 
+After connecting an MCP client, run `qradar_doctor` to check the configured
+host scheme, API Version header, `/help` catalog availability, identity probe,
+feature-toggle posture, and transport warnings for internal HTTP deployments.
+
 ## MCP Client Configuration
 
 Point your MCP client at:
@@ -270,6 +287,9 @@ Important default settings in this fork:
 For strict read-only operation, keep `read_only_mode` enabled and keep
 `POST`/`DELETE` disabled. To hide a whole category, set its group toggle to
 `false`.
+
+Tool outputs default to structured JSON for agent workflows. Tools that expose
+`format_output` return human-readable text only when `format_output=true`.
 
 ## Optional Docker Usage
 

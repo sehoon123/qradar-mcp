@@ -20,7 +20,6 @@ Lists building block rules from QRadar SIEM with filtering, and pagination.
 """
 
 from typing import Dict, Any
-import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
 from qradar_mcp.utils.parameters import build_query_params, build_headers, parse_range_from_limit_offset
@@ -105,12 +104,12 @@ Building block origins:
         building_blocks = response.json()
 
         # Format output
-        format_output = arguments.get("format_output", True)
+        format_output = arguments.get("format_output", False)
         if format_output:
             formatted_output = self._format_building_blocks(building_blocks)
             return self.create_success_response(formatted_output)
 
-        return self.create_success_response(json.dumps(building_blocks, indent=2))
+        return self.create_json_response(building_blocks)
 
     def _build_request_params(self, arguments: Dict[str, Any]) -> tuple:
         """Build query parameters and headers from arguments."""

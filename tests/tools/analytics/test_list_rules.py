@@ -118,11 +118,11 @@ class TestListRulesExecution:
         result = await tool.execute({})
 
         # Verify
-        assert result["content"][0]["type"] == "text"
+        assert result["content"][0]["type"] == "json"
         assert "isError" not in result
-        assert "Rule ID: 100001" in result["content"][0]["text"]
-        assert "Rule ID: 100002" in result["content"][0]["text"]
-        assert "Suspicious Login Activity" in result["content"][0]["text"]
+        assert result["content"][0]["json"][0]["id"] == 100001
+        assert result["content"][0]["json"][1]["id"] == 100002
+        assert result["content"][0]["json"][0]["name"] == "Suspicious Login Activity"
 
         # Verify API call
         tool.client.get.assert_called_once()

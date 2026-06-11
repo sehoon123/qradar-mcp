@@ -20,7 +20,6 @@ Retrieves a list of offenses from QRadar SIEM with filtering, sorting, and pagin
 """
 
 from typing import Dict, Any, Optional, List
-import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
 from qradar_mcp.utils.parameters import (
@@ -97,7 +96,7 @@ Examples:
         offenses, total_count = await self._fetch_offenses(params, headers)
 
         # Format and return response
-        return self._format_response(offenses, total_count, arguments.get("format_output", True))
+        return self._format_response(offenses, total_count, arguments.get("format_output", False))
 
     def _validate_arguments(self, arguments: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Validate input arguments. Returns error response if invalid, None if valid."""
@@ -170,4 +169,4 @@ Examples:
         }
         if total_count:
             result["total_count"] = total_count
-        return self.create_success_response(json.dumps(result, indent=2))
+        return self.create_json_response(result)

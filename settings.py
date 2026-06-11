@@ -22,7 +22,7 @@ security-sensitive defaults in one place.
 import json
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -75,6 +75,22 @@ class HttpxSettings(BaseModel):
     timeout: float = 30.0
 
 
+class CompatibilitySettings(BaseModel):
+    """QRadar API compatibility gate settings."""
+
+    model_config = ConfigDict(extra="allow")
+
+    fail_mode: Literal["open", "closed"] = "open"
+
+
+class AuthSettings(BaseModel):
+    """QRadar identity probe settings."""
+
+    model_config = ConfigDict(extra="allow")
+
+    identity_probe: Literal["strict", "permissive", "disabled_for_local_config"] = "strict"
+
+
 class AppSettings(BaseModel):
     """Top-level application settings."""
 
@@ -83,6 +99,8 @@ class AppSettings(BaseModel):
     qradar: QRadarSettings = Field(default_factory=QRadarSettings)
     server: ServerSettings = Field(default_factory=ServerSettings)
     httpx: HttpxSettings = Field(default_factory=HttpxSettings)
+    compatibility: CompatibilitySettings = Field(default_factory=CompatibilitySettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
 
 
 def parse_bool(value: Any, default: bool) -> bool:
@@ -109,7 +127,7 @@ def load_raw_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Optional[dict]:
         return json.load(f)
 
 
-def load_settings(config_data: Optional[dict] = None) -> AppSettings:
+def load_settings(config_data: Optional[dict] = None) -> AppSettings:  # pylint: disable=too-many-branches
     """
     Normalize config data into typed settings and apply supported env overrides.
 
@@ -140,6 +158,18 @@ def load_settings(config_data: Optional[dict] = None) -> AppSettings:
     qradar_rest_proxy = os.getenv("QRADAR_REST_PROXY")
     if qradar_rest_proxy:
         settings.qradar.proxy = qradar_rest_proxy
+
+    compatibility_fail_mode = os.getenv("QRADAR_COMPATIBILITY_FAIL_MODE")
+    if compatibility_fail_mode:
+        normalized = compatibility_fail_mode.strip().lower()
+        if normalized in {"open", "closed"}:
+            settings.compatibility.fail_mode = normalized
+
+    auth_identity_probe = os.getenv("QRADAR_AUTH_IDENTITY_PROBE")
+    if auth_identity_probe:
+        normalized = auth_identity_probe.strip().lower()
+        if normalized in {"strict", "permissive", "disabled_for_local_config"}:
+            settings.auth.identity_probe = normalized
 
     mcp_host = os.getenv("MCP_HOST")
     if mcp_host:

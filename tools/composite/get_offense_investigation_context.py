@@ -19,8 +19,8 @@ Builds a read-only investigation bundle for a QRadar offense using only GET
 requests. This tool intentionally avoids any mutating HTTP method.
 """
 
+from ipaddress import ip_address as parse_ip_address
 from typing import Any, Dict, Iterable, List, Optional, Tuple
-import json
 
 import httpx
 
@@ -50,7 +50,7 @@ intended for safe triage workflows where data must not be changed."""
         return (schema()
             .integer("offense_id")
                 .description("The QRadar offense ID to investigate")
-                .minimum(0)
+                .minimum(1)
                 .required()
             .boolean("include_notes")
                 .description("Include offense notes")
@@ -89,6 +89,8 @@ intended for safe triage workflows where data must not be changed."""
             return self.create_error_response("Error: offense_id is required")
 
         offense_id = int(offense_id)
+        if offense_id < 1:
+            return self.create_error_response("Error: offense_id must be a positive integer")
         notes_limit = int(arguments.get("notes_limit", 20))
         related_item_limit = int(arguments.get("related_item_limit", 25))
 
@@ -140,7 +142,7 @@ intended for safe triage workflows where data must not be changed."""
         if arguments.get("format_output", False):
             return self.create_success_response(self._format_context(context))
 
-        return self.create_success_response(json.dumps(context, indent=2))
+        return self.create_json_response(context)
 
     async def _get_required_json(self, path: str) -> Any:
         response = await self.client.get(path)
@@ -216,7 +218,7 @@ intended for safe triage workflows where data must not be changed."""
 
         for ip_address in ips:
             params = {
-                "filter": f"interfaces(ip_addresses(value))='{ip_address}'",
+                "filter": f"interfaces(ip_addresses(value))={self._qradar_quote(ip_address)}",
                 "fields": "id,hostnames,interfaces(ip_addresses),risk_score_sum,vulnerability_count,domain_id"
             }
             assets, error = await self._safe_get_json("/asset_model/assets", params=params)
@@ -336,10 +338,13 @@ intended for safe triage workflows where data must not be changed."""
         return result
 
     def _looks_like_ip(self, value: str) -> bool:
-        parts = value.split(".")
-        if len(parts) != 4:
-            return False
         try:
-            return all(0 <= int(part) <= 255 for part in parts)
+            parse_ip_address(value)
+            return True
         except ValueError:
             return False
+
+    @staticmethod
+    def _qradar_quote(value: str) -> str:
+        """Quote a string literal for QRadar filter expressions."""
+        return "'" + value.replace("'", "''") + "'"

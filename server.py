@@ -22,6 +22,7 @@ import os
 import sys
 import atexit
 import asyncio
+from urllib.parse import urlparse
 import httpx
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
@@ -30,6 +31,7 @@ from qradar_mcp.auth_context import AuthTokenMiddleware
 from qradar_mcp.utils.qradar_auth import QRadarAuthMiddleware
 from qradar_mcp.utils.request_context import RequestContextMiddleware
 from qradar_mcp.tools.fastmcp_adapter import register_all_tools
+from qradar_mcp.tools.compatibility import set_fail_mode
 from qradar_mcp.resources.aql_fields import AQLEventsFieldsResource, AQLFlowsFieldsResource
 from qradar_mcp.resources.aql_functions import AQLFunctionsResource
 from qradar_mcp.resources.aql_guide import AQLGenerationGuideResource
@@ -196,6 +198,7 @@ mcp = FastMCP("qradar-mcp", version="1.0.0")
 # Load configuration to determine SSL verification and proxy settings
 config = load_config()
 settings = load_settings(config)
+set_fail_mode(settings.compatibility.fail_mode)
 
 # Determine verify and proxy settings
 if config:
@@ -248,24 +251,41 @@ atexit.register(cleanup_httpx_client)
 # Create a single QRadarRestClient instance for all tools
 qradar_client = QRadarRestClient()
 
+
+def log_transport_safety(settings_obj, client_obj):
+    """Log startup warnings for high-risk transport combinations."""
+    raw_host = getattr(client_obj, "_url", "")  # pylint: disable=protected-access
+    if not raw_host:
+        return
+
+    parsed = urlparse(raw_host if "://" in str(raw_host) else f"https://{raw_host}")
+    if parsed.scheme != "http":
+        return
+
+    log_structured(
+        "QRadar REST is configured for plain HTTP; SEC tokens can traverse the network without TLS",
+        level="WARNING",
+        qradar_host=parsed.netloc,
+        allow_plain_http_private_network=settings_obj.qradar.allow_plain_http_private_network,
+    )
+
+    if settings_obj.server.host in {"0.0.0.0", "::"}:
+        log_structured(
+            "MCP server is remotely bound while QRadar REST uses plain HTTP",
+            level="WARNING",
+            mcp_host=settings_obj.server.host,
+            qradar_host=parsed.netloc,
+            recommendation="Bind MCP to 127.0.0.1 or place it behind TLS/firewall controls.",
+        )
+
+
+log_transport_safety(settings, qradar_client)
+
 # Register enabled MCPTool instances using adapter (filtered by feature toggles)
 registered_tools, skipped_tools = register_all_tools(mcp, toggle_manager, qradar_client)
 
 # Log feature toggle state summary after tools are registered
 log_feature_toggle_summary(registered_tools, skipped_tools)
-
-# Add auth middleware to FastMCP server
-# Note: Middleware should be added after tools are registered
-# Middleware format: list of tuples (middleware_class, args, kwargs)
-# Pass the shared qradar_client instance to maintain connection pooling
-app = mcp.http_app(
-    middleware=[
-        (RequestContextMiddleware, [], {}),
-        (AuthTokenMiddleware, [], {}),
-        (QRadarAuthMiddleware, [], {'api_client_factory': lambda: qradar_client})
-    ]
-)
-
 
 def get_health_status():
     """Return process-local liveness status."""
@@ -313,9 +333,6 @@ def register_health_routes(asgi_app):
         asgi_app.routes.append(Route("/healthz", healthz, methods=["GET"]))
     if "/readyz" not in existing_paths:
         asgi_app.routes.append(Route("/readyz", readyz, methods=["GET"]))
-
-
-register_health_routes(app)
 
 
 # Register resources based on feature toggles
@@ -396,8 +413,27 @@ def register_resources():
         skipped=skipped_resources
     )
 
-# Register resources
 register_resources()
+
+# Add auth middleware to FastMCP server only after tools and resources are registered.
+# Middleware format: list of tuples (middleware_class, args, kwargs).
+# Pass the shared qradar_client instance to maintain connection pooling.
+app = mcp.http_app(
+    middleware=[
+        (RequestContextMiddleware, [], {}),
+        (AuthTokenMiddleware, [], {}),
+        (
+            QRadarAuthMiddleware,
+            [],
+            {
+                'api_client_factory': lambda: qradar_client,
+                'identity_probe': settings.auth.identity_probe,
+            },
+        ),
+    ]
+)
+
+register_health_routes(app)
 
 
 def get_server_bind_settings(config_data):

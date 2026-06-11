@@ -242,6 +242,48 @@ class TestAdapterRegistration:
 
         assert await registered[0]() == {"ok": True, "items": [1, 2]}
 
+    @pytest.mark.asyncio
+    async def test_wrapper_enforces_original_json_schema_constraints(self):
+        """Test enum, pattern, and array item constraints are enforced at runtime."""
+
+        class StrictSchemaTool(GetOffenseTool):
+            @property
+            def name(self):
+                return "strict_schema_tool"
+
+            @property
+            def input_schema(self):
+                return {
+                    "type": "object",
+                    "properties": {
+                        "mode": {"type": "string", "enum": ["events", "flows"]},
+                        "ip": {"type": "string", "pattern": r"^\d+\.\d+\.\d+\.\d+$"},
+                        "fields": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["mode", "ip"],
+                }
+
+            async def _execute_impl(self, arguments):
+                return self.create_json_response({"arguments": arguments})
+
+        registered = []
+        mcp = Mock()
+        mcp.tool.return_value = lambda func: registered.append(func) or func
+
+        register_mcp_tool_with_fastmcp(mcp, StrictSchemaTool())
+
+        valid = await registered[0](mode="events", ip="10.0.0.1", fields=["qid"])
+        assert valid["arguments"]["mode"] == "events"
+
+        with pytest.raises(ValueError, match="Invalid tool arguments"):
+            await registered[0](mode="offenses", ip="10.0.0.1")
+
+        with pytest.raises(ValueError, match="Invalid tool arguments"):
+            await registered[0](mode="events", ip="not-an-ip")
+
+        with pytest.raises(ValueError, match="Invalid tool arguments"):
+            await registered[0](mode="events", ip="10.0.0.1", fields=["qid", 3])
+
 
 class TestToolExecution:
     """Test tool execution through the adapter."""
@@ -400,7 +442,7 @@ class TestRegisterAllTools:
         return FeatureToggleManager(str(config_file))
 
     def test_all_tools_registered_when_all_enabled(self, all_enabled_config):
-        """Test that all 122 tools are registered when all toggles are enabled."""
+        """Test that all 123 tools are registered when all toggles are enabled."""
         from qradar_mcp.tools.fastmcp_adapter import register_all_tools
 
         mock_mcp = Mock()
@@ -409,8 +451,8 @@ class TestRegisterAllTools:
 
         registered_tools, skipped_tools = register_all_tools(mock_mcp, all_enabled_config, mock_qradar_client)
 
-        # Should register all 122 tools
-        assert len(registered_tools) == 122
+        # Should register all 123 tools
+        assert len(registered_tools) == 123
         assert len(skipped_tools) == 0
 
     def test_returns_tuple(self, all_enabled_config):
@@ -441,7 +483,7 @@ class TestRegisterAllTools:
         # Should have some registered and some skipped
         assert len(registered_tools) > 0
         assert len(skipped_tools) > 0
-        assert len(registered_tools) + len(skipped_tools) == 122
+        assert len(registered_tools) + len(skipped_tools) == 123
 
     def test_delete_verb_disabled_skips_delete_tools(self, some_disabled_config):
         """Test that tools with DELETE verb are skipped when DELETE is disabled."""
@@ -513,8 +555,8 @@ class TestRegisterAllTools:
         # No overlap between registered and skipped
         assert len(registered_names & skipped_names) == 0
 
-        # All 122 tools accounted for
-        assert len(registered_names | skipped_names) == 122
+        # All 123 tools accounted for
+        assert len(registered_names | skipped_names) == 123
 
     def test_read_only_mode_excludes_mutating_registration_candidates(self, tmp_path):
         """Test read-only mode does not import/register QRadar-mutating tools."""

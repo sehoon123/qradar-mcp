@@ -37,6 +37,11 @@ from qradar_mcp.tools.endpoint_registry import ENDPOINT_SPECS
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------
+def setup_function():
+    """Reset mutable compatibility policy between tests."""
+    compat.set_fail_mode("open")
+
+
 class _Resp:
     def __init__(self, data):
         self._data = data
@@ -238,6 +243,16 @@ def test_gate_fail_open_when_catalog_unavailable():
     _prime_catalog(endpoints=set(), available=False)
     tool = _make_tool("ListTopOffensesTool")
     assert asyncio.run(gate_tool_call(tool)) is None
+
+
+def test_gate_fail_closed_when_catalog_unavailable():
+    compat.set_fail_mode("closed")
+    _prime_catalog(endpoints=set(), available=False)
+    tool = _make_tool("ListTopOffensesTool", name="list_top_offenses")
+    message = asyncio.run(gate_tool_call(tool))
+    assert message is not None
+    assert "compatibility fail mode is closed" in message
+    assert "/help/endpoints" in message
 
 
 def test_gate_lazy_loads_via_tool_client():

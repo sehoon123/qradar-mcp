@@ -34,6 +34,7 @@ class EndpointSpec:  # pylint: disable=too-many-instance-attributes
     read_only: bool = True
     side_effect: Optional[str] = None
     deprecated: bool = False
+    legacy_api: bool = False
     permission_hint: Optional[str] = None
     additional_required_endpoints: Tuple[EndpointRef, ...] = field(default_factory=tuple)
     optional_endpoints: Tuple[EndpointRef, ...] = field(default_factory=tuple)
@@ -70,6 +71,8 @@ class EndpointSpec:  # pylint: disable=too-many-instance-attributes
             entry["side_effect"] = self.side_effect
         if self.deprecated:
             entry["deprecated"] = True
+        if self.legacy_api:
+            entry["legacy_api"] = True
         if self.permission_hint:
             entry["permission_hint"] = self.permission_hint
         return entry

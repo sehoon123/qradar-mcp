@@ -21,7 +21,6 @@ sorting, and pagination.
 """
 
 from typing import Dict, Any, List
-import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
 from qradar_mcp.utils.parameters import (
@@ -96,12 +95,12 @@ Examples:
         log_sources = await self._fetch_log_sources(params, headers)
 
         # Format and return response
-        format_output = arguments.get("format_output", True)
+        format_output = arguments.get("format_output", False)
         if format_output:
             formatted_output = self._format_log_sources(log_sources)
             return self.create_success_response(formatted_output)
 
-        return self.create_success_response(json.dumps(log_sources, indent=2))
+        return self.create_json_response(log_sources)
 
     def _prepare_request_params(self, arguments: Dict[str, Any]) -> tuple:
         """

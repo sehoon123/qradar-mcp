@@ -29,9 +29,10 @@ Design notes:
     QRadar auth token is injected per-request, so there is no authenticated
     client at import/registration time. ``gate_tool_call`` reuses the calling
     tool's ``client`` (which carries the active request's auth).
-  * Fail-open: if the catalog cannot be fetched (network error, /help denied),
-    gating is skipped and the call proceeds. A real call will surface its own
-    error; we never block a working deployment just because /help is unreachable.
+  * Fail mode is configurable. Development/lab mode defaults to fail-open:
+    if the catalog cannot be fetched (network error, /help denied), gating is
+    skipped and the call proceeds. Production can set fail-closed to block gated
+    tools when the catalog source of truth is unavailable.
   * The catalog is cached with a TTL (a process talks to a single console). A
     failed load is cached only briefly so a transient outage does not disable
     gating for the whole process life; a successful load is cached longer and is
@@ -217,6 +218,7 @@ BASELINE_API_VERSION = "24.0"
 # load is retried sooner so a transient outage does not disable gating forever.
 CATALOG_SUCCESS_TTL = 3600.0
 CATALOG_FAILURE_TTL = 60.0
+_FAIL_MODE = "open"
 
 # Page size used when paging through /help/endpoints.
 _HELP_ENDPOINTS_PAGE_SIZE = 500
@@ -292,6 +294,11 @@ class QRadarEndpointCatalog:
     def max_api_version(self) -> Optional[str]:
         """Highest API version reported by /help/versions, or None if unknown."""
         return self._max_api_version
+
+    @property
+    def endpoint_count(self) -> int:
+        """Number of endpoints loaded from /help/endpoints."""
+        return len(self._endpoints)
 
     def _is_expired(self) -> bool:
         """True if the cached result is older than its TTL and should be reloaded."""
@@ -397,6 +404,20 @@ def reset_catalog() -> None:
     _CATALOG = None
 
 
+def set_fail_mode(fail_mode: str) -> None:
+    """Set compatibility catalog failure behavior."""
+    global _FAIL_MODE  # pylint: disable=global-statement
+    normalized = str(fail_mode or "open").strip().lower()
+    if normalized not in {"open", "closed"}:
+        raise ValueError("compatibility fail mode must be 'open' or 'closed'")
+    _FAIL_MODE = normalized
+
+
+def get_fail_mode() -> str:
+    """Return current compatibility catalog failure behavior."""
+    return _FAIL_MODE
+
+
 async def refresh_catalog(client) -> QRadarEndpointCatalog:
     """Force a reload of the endpoint catalog using the given client."""
     catalog = get_catalog()
@@ -425,6 +446,8 @@ async def gate_tool_call(tool) -> Optional[str]:
     catalog = get_catalog()
     await catalog.ensure_loaded(tool.client)
     if not catalog.available:
+        if get_fail_mode() == "closed":
+            return _format_catalog_unavailable_message(tool, entry)
         return None  # fail-open: could not determine support
 
     missing = [(method, path) for method, path in required if not catalog.supports(method, path)]
@@ -432,6 +455,18 @@ async def gate_tool_call(tool) -> Optional[str]:
         return None
 
     return _format_unsupported_message(tool, entry, catalog, missing)
+
+
+def _format_catalog_unavailable_message(tool, entry: Dict) -> str:
+    """Build an operator-friendly fail-closed message."""
+    min_version = entry.get("min_api_version", BASELINE_API_VERSION)
+    return (
+        f"Tool '{tool.name}' cannot run because the QRadar API compatibility "
+        f"catalog is unavailable and compatibility fail mode is closed. "
+        f"Required minimum API version: {min_version}. Ensure /help/versions "
+        f"and /help/endpoints are reachable by this token, or set "
+        f"compatibility.fail_mode to 'open' for lab use."
+    )
 
 
 def _format_unsupported_message(tool, entry: Dict, catalog: "QRadarEndpointCatalog",

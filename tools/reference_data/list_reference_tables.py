@@ -20,7 +20,6 @@ Lists reference data tables from QRadar SIEM with filtering, sorting, and pagina
 """
 
 from typing import Dict, Any
-import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
 from qradar_mcp.utils.parameters import build_query_params, build_headers, parse_range_from_limit_offset
@@ -102,7 +101,7 @@ Supports filtering, sorting, pagination, and field selection."""
         tables_data = response.json()
 
         # Format and return response
-        return self._format_response(tables_data, arguments.get("format_output", True))
+        return self._format_response(tables_data, arguments.get("format_output", False))
 
     def _build_params(self, arguments: Dict[str, Any]) -> Dict[str, str]:
         """Build query parameters from arguments."""
@@ -127,4 +126,4 @@ Supports filtering, sorting, pagination, and field selection."""
         """Format the response based on format_output flag."""
         if format_output and isinstance(tables_data, list):
             return self.create_success_response(format_reference_sets_table(tables_data))
-        return self.create_success_response(json.dumps(tables_data, indent=2))
+        return self.create_json_response(tables_data)

@@ -296,7 +296,8 @@ class TestListReferenceSetsErrorHandling:
 
         assert "isError" not in result
         assert "content" in result
-        assert "No reference sets found" in result["content"][0]["text"]
+        assert result["content"][0]["type"] == "json"
+        assert result["content"][0]["json"] == []
 
     @pytest.mark.asyncio
     async def test_execute_invalid_filter(self, tool):

@@ -127,6 +127,13 @@ def test_p2_read_only_endpoint_specs_present():
         assert spec.required_endpoints == (endpoint,)
         assert spec.read_only is True
 
+    doctor = ENDPOINT_SPECS["QradarDoctorTool"]
+    assert doctor.required_endpoints == (
+        ("GET", "/help/versions"),
+        ("GET", "/help/endpoints"),
+    )
+    assert doctor.read_only is True
+
 
 def test_p2_composite_ariel_workflow_spec_present():
     spec = ENDPOINT_SPECS["InvestigateOffenseEventsTool"]

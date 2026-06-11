@@ -27,6 +27,7 @@ This adapter preserves all existing tool logic including:
 from typing import Any, Dict, Optional
 from inspect import Parameter, Signature
 from fastmcp import FastMCP
+from jsonschema import Draft7Validator
 from pydantic import Field
 from .base import MCPTool
 
@@ -80,6 +81,19 @@ def _create_pydantic_fields(input_schema: Dict[str, Any]) -> Dict[str, Any]:
     return pydantic_fields
 
 
+def _validate_json_schema(input_schema: Dict[str, Any], arguments: Dict[str, Any]) -> None:
+    """Validate arguments against the original tool JSON Schema."""
+    validator = Draft7Validator(input_schema)
+    errors = sorted(validator.iter_errors(arguments), key=lambda error: list(error.path))
+    if not errors:
+        return
+
+    error = errors[0]
+    location = ".".join(str(part) for part in error.path)
+    prefix = f"{location}: " if location else ""
+    raise ValueError(f"Invalid tool arguments: {prefix}{error.message}")
+
+
 def register_mcp_tool_with_fastmcp(mcp: FastMCP, tool: MCPTool) -> None:
     """
     Register an MCPTool instance with FastMCP using adapter pattern.
@@ -111,6 +125,7 @@ def register_mcp_tool_with_fastmcp(mcp: FastMCP, tool: MCPTool) -> None:
         """Execute the tool with provided arguments"""
         # Filter out None values
         filtered_kwargs = {k: v for k, v in kwargs_dict.items() if v is not None}
+        _validate_json_schema(input_schema, filtered_kwargs)
 
         # Call original tool's execute method (now async)
         result = await tool.execute(filtered_kwargs)
@@ -278,6 +293,7 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
     from .help.get_qradar_endpoint import GetQradarEndpointTool
     from .help.list_qradar_resources import ListQradarResourcesTool
     from .help.get_qradar_resource import GetQradarResourceTool
+    from .help.qradar_doctor import QradarDoctorTool
 
     from .services.geolocate_ip import GeolocateIpTool
     from .services.dns_lookup import DnsLookupTool
@@ -409,13 +425,14 @@ def register_all_tools(mcp: FastMCP, toggle_manager, qradar_client) -> tuple:  #
         ListSystemMetricsTool(),
         GetSystemMetricTool(),
 
-        # API help/discovery tools (6)
+        # API help/discovery tools (7)
         DiscoverQradarEndpointsTool(),
         ListQradarApiVersionsTool(),
         GetQradarApiVersionTool(),
         GetQradarEndpointTool(),
         ListQradarResourcesTool(),
         GetQradarResourceTool(),
+        QradarDoctorTool(),
 
         # Network services and enrichment tools (5)
         GeolocateIpTool(),

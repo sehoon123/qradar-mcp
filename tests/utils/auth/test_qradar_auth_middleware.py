@@ -205,6 +205,101 @@ class TestQRadarAuthMiddleware:
         assert data["code"] == "UNAUTHENTICATED"
 
     @pytest.mark.asyncio
+    async def test_middleware_permissive_identity_probe_allows_token(self):
+        """Test permissive identity probe allows request when a token exists."""
+        mock_client = Mock()
+        mock_client.identify_user = AsyncMock(return_value=(-1, ""))
+        mock_client.identify_authorized_service = AsyncMock(return_value=(-1, ""))
+
+        def api_client_factory():
+            return mock_client
+
+        async def test_endpoint(request):
+            return JSONResponse({
+                "service_id": get_service_id(),
+                "service_label": get_service_label(),
+                "is_service": is_service_auth(),
+            })
+
+        app = Starlette(routes=[Route("/test", test_endpoint)])
+        app.add_middleware(
+            QRadarAuthMiddleware,
+            api_client_factory=api_client_factory,
+            identity_probe="permissive",
+        )
+
+        async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/test", headers={"SEC": "token"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["service_id"] == -1
+        assert data["service_label"] == "identity_probe_failed"
+        assert data["is_service"] is True
+
+    @pytest.mark.asyncio
+    async def test_middleware_permissive_identity_probe_requires_token(self):
+        """Test permissive mode still rejects requests with no QRadar token."""
+        mock_client = Mock()
+        mock_client.identify_user = AsyncMock(return_value=(-1, ""))
+        mock_client.identify_authorized_service = AsyncMock(return_value=(-1, ""))
+
+        def api_client_factory():
+            return mock_client
+
+        async def test_endpoint(request):
+            return JSONResponse({"success": True})
+
+        app = Starlette(routes=[Route("/test", test_endpoint)])
+        app.add_middleware(
+            QRadarAuthMiddleware,
+            api_client_factory=api_client_factory,
+            identity_probe="permissive",
+        )
+
+        async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/test")
+
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_middleware_disabled_for_local_config_skips_identity_probe(self):
+        """Test local config mode can skip identity probe entirely."""
+        mock_client = Mock()
+        mock_client._local_mode = True  # pylint: disable=protected-access
+        mock_client._local_mode_auth = Mock(return_value={"SEC": "local-token"})  # pylint: disable=protected-access
+        mock_client.identify_user = AsyncMock(return_value=(-1, ""))
+        mock_client.identify_authorized_service = AsyncMock(return_value=(-1, ""))
+
+        def api_client_factory():
+            return mock_client
+
+        async def test_endpoint(request):
+            return JSONResponse({
+                "service_id": get_service_id(),
+                "service_label": get_service_label(),
+                "is_service": is_service_auth(),
+            })
+
+        app = Starlette(routes=[Route("/test", test_endpoint)])
+        app.add_middleware(
+            QRadarAuthMiddleware,
+            api_client_factory=api_client_factory,
+            identity_probe="disabled_for_local_config",
+        )
+
+        async with AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/test")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["service_id"] == -1
+        assert data["service_label"] == "local_config_identity_probe_disabled"
+        assert data["is_service"] is True
+        mock_client.identify_user.assert_not_called()
+        mock_client.identify_authorized_service.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_middleware_skips_auth_for_health_routes(self):
         """Test health routes do not call QRadar authentication APIs."""
         mock_client = Mock()

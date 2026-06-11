@@ -166,7 +166,7 @@ class QRadarAuthMiddleware(BaseHTTPMiddleware):
     2. Service authentication (via SEC token only)
     """
 
-    def __init__(self, app, api_client_factory: Callable):
+    def __init__(self, app, api_client_factory: Callable, identity_probe: str = "strict"):
         """
         Initialize the authentication middleware.
 
@@ -177,6 +177,7 @@ class QRadarAuthMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.api_client_factory = api_client_factory
         self._auth_cache: Dict[str, Dict[str, Any]] = {}
+        self.identity_probe = self._normalize_identity_probe(identity_probe)
 
     async def dispatch(self, request: Request, call_next):
         """
@@ -195,6 +196,23 @@ class QRadarAuthMiddleware(BaseHTTPMiddleware):
         # Get API client instance
         api_client = self.api_client_factory()
         cache_key = self._auth_cache_key(request, api_client)
+
+        token_parts = self._request_token_parts(request)
+        if not token_parts:
+            local_mode_auth = getattr(api_client, '_local_mode_auth', None)
+            if callable(local_mode_auth):
+                local_tokens = local_mode_auth()
+                if isinstance(local_tokens, dict):
+                    token_parts = local_tokens
+
+        if self.identity_probe == "disabled_for_local_config" and self._has_local_config_token(api_client, token_parts):
+            identity = {
+                "type": "service",
+                "id": -1,
+                "label": "local_config_identity_probe_disabled",
+                "identity_unknown": True,
+            }
+            return await self._call_with_identity(identity, request, call_next)
 
         cached_identity = self._get_cached_identity(cache_key)
         if cached_identity:
@@ -222,6 +240,17 @@ class QRadarAuthMiddleware(BaseHTTPMiddleware):
             }
             self._set_cached_identity(cache_key, identity)
             log_mcp(f"Authenticated as service: {service_label} (ID: {service_id})", level='DEBUG')
+            return await self._call_with_identity(identity, request, call_next)
+
+        if self.identity_probe == "permissive" and token_parts:
+            identity = {
+                "type": "service",
+                "id": -1,
+                "label": "identity_probe_failed",
+                "identity_unknown": True,
+            }
+            self._set_cached_identity(cache_key, identity)
+            log_mcp("QRadar identity probe failed; proceeding in permissive mode", level='WARNING')
             return await self._call_with_identity(identity, request, call_next)
 
         # If both authentication methods fail, return 401
@@ -293,6 +322,19 @@ class QRadarAuthMiddleware(BaseHTTPMiddleware):
             return None
 
         return hashlib.sha256(fingerprint_source.encode('utf-8')).hexdigest()
+
+    @staticmethod
+    def _normalize_identity_probe(identity_probe: str) -> str:
+        """Normalize and validate identity probe mode."""
+        normalized = str(identity_probe or "strict").strip().lower()
+        if normalized not in {"strict", "permissive", "disabled_for_local_config"}:
+            return "strict"
+        return normalized
+
+    @staticmethod
+    def _has_local_config_token(api_client, token_parts: Dict[str, str]) -> bool:
+        """Return True when the client is using local config auth tokens."""
+        return bool(getattr(api_client, '_local_mode', False) and token_parts)
 
     @staticmethod
     def _request_token_parts(request: Request) -> Dict[str, str]:
