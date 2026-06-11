@@ -19,6 +19,8 @@ Provides fixtures for FastMCP-based tests.
 """
 
 import os
+import sys
+import types
 import pytest
 from unittest.mock import Mock
 
@@ -43,15 +45,59 @@ def mock_qpylib(monkeypatch):
     mock.get_console_fqdn = Mock(return_value='test.qradar.com')
     mock.get_console_address = Mock(return_value='127.0.0.1')
 
-    # Patch qpylib in common locations
-    monkeypatch.setattr('qpylib.qpylib.log', mock.log)
-    monkeypatch.setattr('qpylib.qpylib.get_app_id', mock.get_app_id)
-    monkeypatch.setattr('qpylib.qpylib.create_log', mock.create_log)
-    monkeypatch.setattr('qpylib.qpylib.q_url_for', mock.q_url_for)
-    monkeypatch.setattr('qpylib.qpylib.get_console_fqdn', mock.get_console_fqdn)
-    monkeypatch.setattr('qpylib.qpylib.get_console_address', mock.get_console_address)
+    qpylib_package = types.ModuleType('qpylib')
+    qpylib_module = types.ModuleType('qpylib.qpylib')
+    qpylib_package.qpylib = qpylib_module
+    monkeypatch.setitem(sys.modules, 'qpylib', qpylib_package)
+    monkeypatch.setitem(sys.modules, 'qpylib.qpylib', qpylib_module)
 
-    return mock
+    # Patch qpylib in common locations
+    monkeypatch.setattr('qpylib.qpylib.log', mock.log, raising=False)
+    monkeypatch.setattr('qpylib.qpylib.get_app_id', mock.get_app_id, raising=False)
+    monkeypatch.setattr('qpylib.qpylib.create_log', mock.create_log, raising=False)
+    monkeypatch.setattr('qpylib.qpylib.q_url_for', mock.q_url_for, raising=False)
+    monkeypatch.setattr('qpylib.qpylib.get_console_fqdn', mock.get_console_fqdn, raising=False)
+    monkeypatch.setattr('qpylib.qpylib.get_console_address', mock.get_console_address, raising=False)
+
+    try:
+        from qradar_mcp.utils import mcp_logger
+        mcp_logger._MCP_LOGGER = None  # pylint: disable=protected-access
+        mcp_logger.MCPLogger._instance = None  # pylint: disable=protected-access
+        mcp_logger.MCPLogger._logger = None  # pylint: disable=protected-access
+        mcp_logger.MCPLogger._local_mode = None  # pylint: disable=protected-access
+    except Exception:  # pragma: no cover - best-effort test isolation
+        pass
+
+    yield mock
+
+    try:
+        from qradar_mcp.utils import mcp_logger
+        mcp_logger._MCP_LOGGER = None  # pylint: disable=protected-access
+        mcp_logger.MCPLogger._instance = None  # pylint: disable=protected-access
+        mcp_logger.MCPLogger._logger = None  # pylint: disable=protected-access
+        mcp_logger.MCPLogger._local_mode = None  # pylint: disable=protected-access
+    except Exception:  # pragma: no cover - best-effort test isolation
+        pass
+
+
+@pytest.fixture(autouse=True)
+def reset_compatibility_catalog():
+    """Reset the process-wide compatibility catalog between tests."""
+    from qradar_mcp.tools.compatibility import reset_catalog
+
+    reset_catalog()
+    yield
+    reset_catalog()
+
+
+@pytest.fixture(autouse=True)
+def reset_feature_toggle_manager():
+    """Reset the process-wide feature toggle manager between tests."""
+    from qradar_mcp.utils.feature_toggle_manager import set_feature_toggle_manager
+
+    set_feature_toggle_manager(None)
+    yield
+    set_feature_toggle_manager(None)
 
 @pytest.fixture
 def mock_requests():

@@ -24,6 +24,8 @@ import atexit
 import asyncio
 import httpx
 from fastmcp import FastMCP
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 from qradar_mcp.auth_context import AuthTokenMiddleware
 from qradar_mcp.utils.qradar_auth import QRadarAuthMiddleware
 from qradar_mcp.utils.request_context import RequestContextMiddleware
@@ -31,6 +33,8 @@ from qradar_mcp.tools.fastmcp_adapter import register_all_tools
 from qradar_mcp.resources.aql_fields import AQLEventsFieldsResource, AQLFlowsFieldsResource
 from qradar_mcp.resources.aql_functions import AQLFunctionsResource
 from qradar_mcp.resources.aql_guide import AQLGenerationGuideResource
+from qradar_mcp.resources.aql_query_templates import AQLQueryTemplatesResource
+from qradar_mcp.settings import load_settings
 from qradar_mcp.client.qradar_rest_client import QRadarRestClient, load_config
 from qradar_mcp.utils.feature_toggle_manager import (
     FeatureToggleManager,
@@ -168,14 +172,6 @@ def cleanup_httpx_client():
     """
     async def _cleanup():
         await QRadarRestClient.close_shared_client()
-        try:
-            log_structured(
-                "Shared httpx.AsyncClient closed",
-                level='INFO'
-            )
-        except RuntimeError:
-            # Logging may not be initialized in test environment
-            pass
 
     # Run the async cleanup
     try:
@@ -199,35 +195,33 @@ mcp = FastMCP("qradar-mcp", version="1.0.0")
 
 # Load configuration to determine SSL verification and proxy settings
 config = load_config()
+settings = load_settings(config)
 
 # Determine verify and proxy settings
 if config:
     # Local development mode - use config.json settings
-    VERIFY_SSL = config['qradar'].get('verify_ssl', False)
-    PROXY_URL = config['qradar'].get('proxy')
+    VERIFY_SSL = settings.qradar.verify_ssl
+    PROXY_URL = settings.qradar.proxy
 
-    # Get httpx configuration with defaults
-    httpx_config = config.get('httpx', {})
-    MAX_KEEPALIVE = httpx_config.get('max_keepalive_connections', 20)
-    MAX_CONNECTIONS = httpx_config.get('max_connections', 100)
-    TIMEOUT = httpx_config.get('timeout', 30.0)
+    MAX_KEEPALIVE = settings.httpx.max_keepalive_connections
+    MAX_CONNECTIONS = settings.httpx.max_connections
+    TIMEOUT = settings.httpx.timeout
 else:
     # QRadar App mode - check environment variables
     IS_FVT_ENV = os.getenv('FUNCTIONAL_TEST_ENV') is not None
     CERT_PATH = os.getenv('REQUESTS_CA_BUNDLE')
-    PROXY_URL = os.getenv('QRADAR_REST_PROXY')
+    PROXY_URL = settings.qradar.proxy
 
     if IS_FVT_ENV:
         VERIFY_SSL = False
     elif CERT_PATH:
         VERIFY_SSL = CERT_PATH
     else:
-        VERIFY_SSL = False
+        VERIFY_SSL = settings.qradar.verify_ssl
 
-    # Use environment variables or defaults for httpx settings
-    MAX_KEEPALIVE = int(os.getenv('MCP_HTTPX_MAX_KEEPALIVE_CONNECTIONS', '20'))
-    MAX_CONNECTIONS = int(os.getenv('MCP_HTTPX_MAX_CONNECTIONS', '100'))
-    TIMEOUT = float(os.getenv('MCP_HTTPX_TIMEOUT', '30.0'))
+    MAX_KEEPALIVE = settings.httpx.max_keepalive_connections
+    MAX_CONNECTIONS = settings.httpx.max_connections
+    TIMEOUT = settings.httpx.timeout
 
 # Initialize shared httpx client for connection pooling with proper SSL and proxy config
 httpx_client = httpx.AsyncClient(
@@ -271,6 +265,57 @@ app = mcp.http_app(
         (QRadarAuthMiddleware, [], {'api_client_factory': lambda: qradar_client})
     ]
 )
+
+
+def get_health_status():
+    """Return process-local liveness status."""
+    return {
+        "status": "ok",
+        "service": "qradar-mcp",
+        "version": getattr(mcp, "version", "unknown"),
+        "registered_tools": len(registered_tools),
+    }
+
+
+def get_readiness_status():
+    """Return initialization readiness without calling the QRadar console."""
+    shared_client = QRadarRestClient._shared_client  # pylint: disable=protected-access
+    httpx_ready = shared_client is not None and not getattr(shared_client, "is_closed", False)
+    qradar_host = getattr(qradar_client, "_url", None)  # pylint: disable=protected-access
+    ready = httpx_ready and bool(qradar_host)
+
+    return {
+        "status": "ready" if ready else "not_ready",
+        "service": "qradar-mcp",
+        "checks": {
+            "httpx_client": "ok" if httpx_ready else "unavailable",
+            "qradar_host": "configured" if qradar_host else "missing",
+            "registered_tools": len(registered_tools),
+        },
+    }
+
+
+def register_health_routes(asgi_app):
+    """Attach lightweight liveness and readiness routes to the ASGI app."""
+    async def healthz(_request):
+        return JSONResponse(get_health_status())
+
+    async def readyz(_request):
+        payload = get_readiness_status()
+        status_code = 200 if payload["status"] == "ready" else 503
+        return JSONResponse(payload, status_code=status_code)
+
+    existing_paths = {
+        getattr(route, "path", None)
+        for route in getattr(asgi_app, "routes", [])
+    }
+    if "/healthz" not in existing_paths:
+        asgi_app.routes.append(Route("/healthz", healthz, methods=["GET"]))
+    if "/readyz" not in existing_paths:
+        asgi_app.routes.append(Route("/readyz", readyz, methods=["GET"]))
+
+
+register_health_routes(app)
 
 
 # Register resources based on feature toggles
@@ -328,6 +373,18 @@ def register_resources():
     else:
         skipped_resources.append('aql_generation_guide')
 
+    # AQL Query Templates Resource
+    if resource_toggles.get('aql_query_templates', False):
+        @mcp.resource("qradar://aql/templates")
+        async def aql_query_templates() -> str:
+            """AQL query templates"""
+            resource = AQLQueryTemplatesResource()
+            result = resource.read()
+            return result["contents"][0]["text"]
+        registered_resources.append('aql_query_templates')
+    else:
+        skipped_resources.append('aql_query_templates')
+
     # Log resource registration summary
     log_structured(
         "Resource Registration Summary",
@@ -345,9 +402,10 @@ register_resources()
 
 def get_server_bind_settings(config_data):
     """Resolve uvicorn bind host and port from config and environment."""
+    resolved_settings = load_settings(config_data)
     server_config = config_data.get('server', {}) if config_data else {}
-    host = os.getenv('MCP_HOST') or server_config.get('host') or '0.0.0.0'
-    raw_port = os.getenv('MCP_PORT') or server_config.get('port') or 5000
+    host = resolved_settings.server.host
+    raw_port = os.getenv('MCP_PORT') or server_config.get('port') or resolved_settings.server.port
 
     try:
         port = int(raw_port)

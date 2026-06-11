@@ -357,6 +357,22 @@ class TestAuditLogger:
         assert sanitized['long_field'].endswith('...[truncated]')
         assert sanitized['short_field'] == 'short'
 
+    def test_sanitize_for_audit_redacts_soc_content(self):
+        """Test that raw query, filter, and note content is not audited."""
+        data = {
+            'query_expression': "SELECT * FROM events WHERE username = 'alice'",
+            'filter': "sourceip = '10.0.0.1'",
+            'note_text': 'Sensitive investigation note',
+        }
+
+        sanitized = AuditLogger._sanitize_for_audit(data)
+
+        assert sanitized['query_expression']['redacted'] is True
+        assert sanitized['filter']['redacted'] is True
+        assert sanitized['note_text']['redacted'] is True
+        assert 'alice' not in str(sanitized)
+        assert '10.0.0.1' not in str(sanitized)
+
     def test_sanitize_for_audit_case_insensitive(self):
         """Test that sensitive key matching is case-insensitive."""
         data = {

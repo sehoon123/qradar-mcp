@@ -21,7 +21,12 @@ Tests the FastMCP server initialization, factory methods, and resource functions
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from qradar_mcp.server import mcp, app
+from qradar_mcp.server import (
+    mcp,
+    app,
+    get_health_status,
+    get_readiness_status,
+)
 from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
 
 class TestMCPServerInitialization:
@@ -43,6 +48,42 @@ class TestMCPServerInitialization:
         assert app is not None
         # App should be an ASGI application
         assert callable(app)
+
+    def test_health_routes_registered(self):
+        """Test that liveness and readiness routes are attached."""
+        paths = {getattr(route, 'path', None) for route in app.routes}
+
+        assert '/healthz' in paths
+        assert '/readyz' in paths
+
+    def test_health_status_payload(self):
+        """Test liveness payload is process-local and stable."""
+        payload = get_health_status()
+
+        assert payload['status'] == 'ok'
+        assert payload['service'] == 'qradar-mcp'
+        assert payload['version'] == '1.0.0'
+        assert payload['registered_tools'] > 0
+
+    def test_readiness_status_payload(self):
+        """Test readiness payload reports initialization checks."""
+        payload = get_readiness_status()
+
+        assert payload['status'] in {'ready', 'not_ready'}
+        assert payload['service'] == 'qradar-mcp'
+        assert 'httpx_client' in payload['checks']
+        assert 'qradar_host' in payload['checks']
+        assert payload['checks']['registered_tools'] > 0
+
+    @patch.dict('os.environ', {}, clear=True)
+    def test_server_bind_defaults_to_localhost(self):
+        """Test default bind settings prefer localhost."""
+        from qradar_mcp.server import get_server_bind_settings
+
+        host, port = get_server_bind_settings(None)
+
+        assert host == "127.0.0.1"
+        assert port == 5000
 
 
 class TestResourceRegistration:
@@ -68,7 +109,8 @@ class TestResourceRegistration:
             'aql_events_fields': True,
             'aql_flows_fields': False,
             'aql_functions': True,
-            'aql_generation_guide': False
+            'aql_generation_guide': False,
+            'aql_query_templates': False
         }
 
         # Mock the resource read methods
@@ -98,13 +140,14 @@ class TestResourceRegistration:
         assert len(summary_calls) == 1, "Should log resource registration summary"
         summary_kwargs = summary_calls[0][1]
 
-        assert summary_kwargs['total_resources'] == 4
+        assert summary_kwargs['total_resources'] == 5
         assert summary_kwargs['registered_count'] == 2
-        assert summary_kwargs['skipped_count'] == 2
+        assert summary_kwargs['skipped_count'] == 3
         assert 'aql_events_fields' in summary_kwargs['registered']
         assert 'aql_functions' in summary_kwargs['registered']
         assert 'aql_flows_fields' in summary_kwargs['skipped']
         assert 'aql_generation_guide' in summary_kwargs['skipped']
+        assert 'aql_query_templates' in summary_kwargs['skipped']
 
 
 if __name__ == "__main__":

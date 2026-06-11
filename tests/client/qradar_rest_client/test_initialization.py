@@ -131,4 +131,26 @@ class TestQRadarRestClientGetVerify:
         mock_load_config.return_value = None
 
         client = QRadarRestClient()
+        assert client._get_verify() is True
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_get_verify_local_mode_defaults_true(self, mock_load_config):
+        """Test _get_verify in local mode defaults to SSL verification."""
+        mock_config = {
+            "qradar": {
+                "host": "https://qradar.local"
+            }
+        }
+        mock_load_config.return_value = mock_config
+
+        client = QRadarRestClient()
+        assert client._get_verify() is True
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    @patch.dict(os.environ, {'QRADAR_VERIFY_SSL': 'false', 'QRADAR_CONSOLE_FQDN': 'test.qradar.com'}, clear=True)
+    def test_get_verify_env_override_false(self, mock_load_config):
+        """Test _get_verify can be disabled explicitly by env."""
+        mock_load_config.return_value = None
+
+        client = QRadarRestClient()
         assert client._get_verify() is False

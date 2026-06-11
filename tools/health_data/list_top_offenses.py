@@ -104,4 +104,3 @@ offenses that may need triage attention."""
             )
             lines.append(f"  Update count: {offense.get('count', 'N/A')}")
         return "\n".join(lines)
-

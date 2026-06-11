@@ -104,4 +104,3 @@ responses, which helps find noisy detection logic and high-value rule context.""
             )
             lines.append(f"  Response count: {rule.get('count', 'N/A')}")
         return "\n".join(lines)
-

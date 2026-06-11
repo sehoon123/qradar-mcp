@@ -24,6 +24,7 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from .mcp_logger import log_mcp
+from .redaction import sanitize_for_audit
 
 # Import context variable getters from middleware
 from .request_context import (
@@ -225,23 +226,8 @@ class AuditLogger:
         Returns:
             Sanitized data safe for audit logs
         """
-        sensitive_keys = [
-            'password', 'token', 'secret', 'api_key', 'auth',
-            'sec_token', 'csrf_token', 'authorized_service_token'
-        ]
-
-        sanitized = {}
-        for key, value in data.items():
-            if any(sensitive in key.lower() for sensitive in sensitive_keys):
-                sanitized[key] = '***REDACTED***'
-            elif isinstance(value, dict):
-                sanitized[key] = AuditLogger._sanitize_for_audit(value)
-            elif isinstance(value, str) and len(value) > 1000:
-                sanitized[key] = value[:1000] + '...[truncated]'
-            else:
-                sanitized[key] = value
-
-        return sanitized
+        sanitized = sanitize_for_audit(data)
+        return sanitized if isinstance(sanitized, dict) else {}
 
     @staticmethod
     def _write_audit_log(audit_entry: Dict[str, Any]):

@@ -5,7 +5,8 @@
     "csrf_token": "",
     "authorized_service_token": "",
     "app_id": "",
-    "verify_ssl": false,
+    "verify_ssl": true,
+    "api_version": "27.0",
     "proxy": null
   },
   "server": {

@@ -86,4 +86,3 @@ before composing AQL."""
             if info:
                 lines.append(f"  {info}")
         return "\n".join(lines)
-

@@ -123,4 +123,3 @@ including metadata like indexability and value type."""
             if details:
                 lines.append("  " + " | ".join(details))
         return "\n".join(lines)
-

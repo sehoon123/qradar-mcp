@@ -26,12 +26,14 @@
   "per_tool_toggles": {},
   "read_only_post_allowlist": [
     "CreateArielSearchTool",
-    "ValidateAQLTool"
+    "ValidateAQLTool",
+    "InvestigateOffenseEventsTool"
   ],
   "resource_toggles": {
     "aql_events_fields": true,
     "aql_flows_fields": true,
     "aql_functions": true,
-    "aql_generation_guide": true
+    "aql_generation_guide": true,
+    "aql_query_templates": true
   }
 }

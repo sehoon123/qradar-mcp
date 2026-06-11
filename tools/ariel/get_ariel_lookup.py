@@ -89,4 +89,3 @@ value when interpreting tagged field values in query results."""
         if isinstance(mapping, dict):
             lines.append(f"Entries: {len(mapping)}")
         return "\n".join(lines)
-

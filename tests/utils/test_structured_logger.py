@@ -136,6 +136,26 @@ class TestStructuredLogger:
 
     @patch('qradar_mcp.utils.structured_logger.log_mcp')
     @patch('qradar_mcp.utils.structured_logger.StructuredLogger._get_context')
+    def test_log_redacts_sensitive_extra_context(self, mock_context, mock_log_mcp):
+        """Test extra context is sanitized before it reaches the logger."""
+        mock_context.return_value = {
+            'timestamp': 1704067200.0,
+            'timestamp_iso': '2024-01-01T00:00:00Z'
+        }
+
+        StructuredLogger.log(
+            'Test message',
+            authorized_service_token='token',
+            query_expression="SELECT * FROM events WHERE username = 'alice'"
+        )
+
+        call_args = mock_log_mcp.call_args
+        assert call_args[1]['authorized_service_token'] == '***REDACTED***'
+        assert call_args[1]['query_expression']['redacted'] is True
+        assert 'alice' not in str(call_args[1]['query_expression'])
+
+    @patch('qradar_mcp.utils.structured_logger.log_mcp')
+    @patch('qradar_mcp.utils.structured_logger.StructuredLogger._get_context')
     def test_log_tool_execution_started(self, mock_context, mock_log_mcp):
         """Test logging tool execution started."""
         mock_context.return_value = {
@@ -265,6 +285,22 @@ class TestStructuredLogger:
         assert sanitized['PASSWORD'] == '***REDACTED***'
         assert sanitized['Api_Key'] == '***REDACTED***'
         assert sanitized['AUTH_TOKEN'] == '***REDACTED***'
+
+    def test_sanitize_arguments_redacts_query_and_notes(self):
+        """Test SOC content fields are summarized instead of logged raw."""
+        arguments = {
+            'query_expression': "SELECT * FROM events WHERE username = 'alice'",
+            'filter': "sourceip = '10.0.0.1'",
+            'note_text': 'Sensitive investigation note',
+        }
+
+        sanitized = StructuredLogger._sanitize_arguments(arguments)
+
+        assert sanitized['query_expression']['redacted'] is True
+        assert sanitized['filter']['redacted'] is True
+        assert sanitized['note_text']['redacted'] is True
+        assert 'alice' not in str(sanitized)
+        assert '10.0.0.1' not in str(sanitized)
 
     @patch('qradar_mcp.utils.structured_logger.StructuredLogger.log')
     def test_log_structured_convenience_function(self, mock_log):

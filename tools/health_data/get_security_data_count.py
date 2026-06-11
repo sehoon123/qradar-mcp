@@ -58,4 +58,3 @@ starting an investigation or health review."""
         )
         response.raise_for_status()
         return self.create_success_response(json.dumps(response.json(), indent=2))
-

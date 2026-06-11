@@ -31,6 +31,7 @@ from qradar_mcp.tools.compatibility import (
     refresh_catalog,
     reset_catalog,
 )
+from qradar_mcp.tools.endpoint_registry import ENDPOINT_SPECS
 
 
 # ---------------------------------------------------------------------------
@@ -289,18 +290,47 @@ def test_unsupported_message_includes_metadata():
 # ---------------------------------------------------------------------------
 # Registry invariants
 # ---------------------------------------------------------------------------
-def test_registry_entries_respect_baseline():
+def test_registry_entries_have_versions_and_required_endpoints():
     for class_name, entry in COMPATIBILITY_REGISTRY.items():
         version = entry.get("min_api_version", BASELINE_API_VERSION)
-        assert float(version) <= float(BASELINE_API_VERSION), (
-            f"{class_name} requires API {version} > baseline {BASELINE_API_VERSION}"
-        )
+        assert float(version) >= float(BASELINE_API_VERSION), f"{class_name} has invalid min API {version}"
         assert entry.get("required_endpoints"), f"{class_name} has no required_endpoints"
 
 
-def test_all_registry_entries_are_read_only():
+def test_get_registry_entries_are_read_only():
     for class_name, entry in COMPATIBILITY_REGISTRY.items():
-        assert entry.get("read_only") is True, f"{class_name} is not marked read_only"
+        methods = {method for method, _ in entry.get("required_endpoints", [])}
+        if methods == {"GET"}:
+            assert entry.get("read_only") is True, f"{class_name} GET entry is not marked read_only"
+
+
+def test_mutating_registry_entries_marked_not_read_only():
+    mutating = {
+        "UpdateOffenseTool",
+        "AddOffenseNoteTool",
+        "DeleteArielSearchTool",
+        "DeleteSavedSearchTool",
+        "CreateReferenceSetTool",
+        "UpdateReferenceSetTool",
+        "DeleteReferenceSetTool",
+        "AddToReferenceSetTool",
+        "RemoveFromReferenceSetTool",
+        "CreateReferenceMap",
+        "AddToReferenceMap",
+        "DeleteReferenceMap",
+        "RemoveFromReferenceMap",
+        "CreateReferenceTable",
+        "AddToReferenceTable",
+        "DeleteReferenceTable",
+        "RemoveFromReferenceTable",
+    }
+    for class_name in mutating:
+        assert COMPATIBILITY_REGISTRY[class_name]["read_only"] is False
+
+
+def test_endpoint_specs_cover_compatibility_registry():
+    for class_name in ENDPOINT_SPECS:
+        assert class_name in COMPATIBILITY_REGISTRY
 
 
 def test_ariel_search_marked_read_only_with_side_effect():

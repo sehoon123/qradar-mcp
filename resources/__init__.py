@@ -33,6 +33,7 @@ from .base import MCPResource
 from .aql_fields import AQLEventsFieldsResource, AQLFlowsFieldsResource
 from .aql_functions import AQLFunctionsResource
 from .aql_guide import AQLGenerationGuideResource
+from .aql_query_templates import AQLQueryTemplatesResource
 
 
 
@@ -43,4 +44,5 @@ __all__ = [
     'AQLFlowsFieldsResource',
     'AQLFunctionsResource',
     'AQLGenerationGuideResource',
+    'AQLQueryTemplatesResource',
 ]

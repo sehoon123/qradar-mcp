@@ -115,6 +115,58 @@ class TestRetryDecorator:
     @pytest.mark.asyncio
     @patch('qradar_mcp.utils.retry.log_mcp')
     @patch('qradar_mcp.utils.retry.asyncio.sleep')
+    async def test_retries_on_timeout_by_default(self, mock_sleep, mock_log_mcp):
+        """Test that timeout errors trigger retries by default."""
+        mock_sleep.return_value = None
+
+        call_count = 0
+
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise httpx.TimeoutException("Timeout")
+            return "success"
+
+        mock_func.__name__ = "test_func"
+        decorated = retry_on_failure_async(max_attempts=2)(mock_func)
+
+        result = await decorated()
+
+        assert result == "success"
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    @patch('qradar_mcp.utils.retry.log_mcp')
+    @patch('qradar_mcp.utils.retry.asyncio.sleep')
+    async def test_retry_after_header_controls_delay(self, mock_sleep, mock_log_mcp):
+        """Test Retry-After header is honored for retryable HTTP errors."""
+        mock_sleep.return_value = None
+
+        request = httpx.Request("GET", "http://test")
+        response = httpx.Response(429, request=request, headers={"Retry-After": "7"})
+        error = httpx.HTTPStatusError("Error", request=request, response=response)
+
+        call_count = 0
+
+        async def mock_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise error
+            return "success"
+
+        mock_func.__name__ = "test_func"
+        decorated = retry_on_failure_async(max_attempts=2, max_delay=30)(mock_func)
+
+        result = await decorated()
+
+        assert result == "success"
+        assert mock_sleep.call_args_list[0][0][0] == pytest.approx(7.0)
+
+    @pytest.mark.asyncio
+    @patch('qradar_mcp.utils.retry.log_mcp')
+    @patch('qradar_mcp.utils.retry.asyncio.sleep')
     async def test_fails_after_max_attempts(self, mock_sleep, mock_log_mcp):
         """Test that function fails after max attempts"""
         mock_sleep.return_value = None

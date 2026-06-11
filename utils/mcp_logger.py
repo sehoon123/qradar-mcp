@@ -65,7 +65,7 @@ class MCPLogger:
     def _init_qpylib_logger(self):
         """Initialize qpylib logger for QRadar app mode."""
         try:
-            # pylint: disable=import-outside-toplevel
+            # pylint: disable=import-outside-toplevel,import-error
             from qpylib import qpylib
             qpylib.create_log(False)
             self._logger = qpylib

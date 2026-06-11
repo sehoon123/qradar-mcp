@@ -20,6 +20,7 @@ Provides the abstract base class that all MCP tools must inherit from.
 Includes production-ready features: structured logging, input sanitization, and audit logging.
 """
 
+import json
 import time
 from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
@@ -29,7 +30,10 @@ import httpx
 from qradar_mcp.utils.structured_logger import log_structured
 from qradar_mcp.utils.audit_logger import AuditLogger
 from qradar_mcp.utils.error_handler import extract_qradar_error
+from qradar_mcp.utils.feature_toggle_manager import get_feature_toggle_manager
+from qradar_mcp.utils.redaction import sanitize_for_logging
 from qradar_mcp.client.qradar_rest_client import QRadarRestClient
+from qradar_mcp.tools.compatibility import gate_tool_call
 
 
 class MCPTool(ABC):
@@ -308,12 +312,12 @@ class MCPTool(ABC):
         """
         try:
             # Allow disabling the gate entirely via feature toggles.
-            from qradar_mcp.utils.feature_toggle_manager import get_feature_toggle_manager
             manager = get_feature_toggle_manager()
+            if manager is None:
+                return None
             if manager is not None and not getattr(manager, 'compatibility_gate_enabled', True):
                 return None
 
-            from qradar_mcp.tools.compatibility import gate_tool_call
             return await gate_tool_call(self)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             log_structured(
@@ -358,16 +362,8 @@ class MCPTool(ABC):
         Returns:
             Sanitized arguments safe for logging
         """
-        # Create a copy to avoid modifying original
-        sanitized = arguments.copy()
-
-        # Remove common sensitive fields
-        sensitive_fields = ['password', 'token', 'secret', 'api_key', 'credential']
-        for field in sensitive_fields:
-            if field in sanitized:
-                sanitized[field] = '***REDACTED***'
-
-        return sanitized
+        sanitized = sanitize_for_logging(arguments)
+        return sanitized if isinstance(sanitized, dict) else {}
 
     def create_success_response(self, text: str) -> Dict[str, Any]:
         """Helper to create a successful response."""
@@ -379,6 +375,22 @@ class MCPTool(ABC):
                 }
             ]
         }
+
+    def create_json_response(self, data: Any) -> Dict[str, Any]:
+        """Helper to create a structured JSON response with a text fallback."""
+        return {
+            "content": [
+                {
+                    "type": "json",
+                    "json": data,
+                    "text": self._json_text(data)
+                }
+            ]
+        }
+
+    def _json_text(self, data: Any) -> str:
+        """Return a deterministic JSON string for clients that only read text."""
+        return json.dumps(data, indent=2)
 
     def create_error_response(self, error_message: str) -> Dict[str, Any]:
         """Helper to create an error response."""

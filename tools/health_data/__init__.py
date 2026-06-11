@@ -13,4 +13,3 @@
 # limitations under the License.
 
 """Read-only QRadar health data tools."""
-

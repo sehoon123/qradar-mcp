@@ -57,4 +57,3 @@ AQL that conflicts with reserved words or unsupported syntax."""
         )
         response.raise_for_status()
         return self.create_success_response(json.dumps(response.json(), indent=2))
-

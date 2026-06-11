@@ -50,6 +50,46 @@ NEW_READ_ONLY_TOOLS = [
     "ariel/get_ariel_database_columns.py",
     "ariel/list_ariel_lookups.py",
     "ariel/get_ariel_lookup.py",
+    "ariel/get_ariel_search_metadata.py",
+    "health_data/list_qradar_metrics.py",
+    "health_data/get_qradar_metric.py",
+    "health_data/list_system_metrics.py",
+    "health_data/get_system_metric.py",
+    "help/list_qradar_api_versions.py",
+    "help/get_qradar_api_version.py",
+    "help/get_qradar_endpoint.py",
+    "help/list_qradar_resources.py",
+    "help/get_qradar_resource.py",
+    "qvm/list_qvm_filters.py",
+    "qvm/list_qvm_network.py",
+    "qvm/list_qvm_openservices.py",
+    "qvm/list_qvm_saved_search_groups.py",
+    "qvm/get_qvm_saved_search_group.py",
+    "qvm/list_qvm_saved_searches.py",
+    "qvm/get_qvm_saved_search.py",
+    "qvm/create_qvm_vuln_instance_search.py",
+    "qvm/get_qvm_vuln_instance_search_status.py",
+    "qvm/list_qvm_vuln_instance_result_assets.py",
+    "qvm/list_qvm_vuln_instance_result_instances.py",
+    "qvm/list_qvm_vuln_instance_result_vulnerabilities.py",
+    "forensics/list_capture_recoveries.py",
+    "forensics/get_capture_recovery.py",
+    "forensics/list_capture_recovery_tasks.py",
+    "forensics/get_capture_recovery_task.py",
+    "forensics/get_case_create_task.py",
+    "offense/get_offense_note.py",
+    "offense/list_offense_assignable_actors.py",
+    "offense/list_offense_saved_searches.py",
+    "offense/get_offense_saved_search.py",
+    "offense/list_offenses_ocsf.py",
+    "offense/get_source_address.py",
+    "offense/get_local_destination_address.py",
+    "reference_data/list_reference_set_entries.py",
+    "reference_data/get_reference_set_entry.py",
+    "reference_data/get_reference_set_dependents.py",
+    "reference_data/get_set_bulk_update_task.py",
+    "reference_data/get_set_bulk_update_task_results.py",
+    "reference_data/get_set_delete_task.py",
 ]
 
 FORBIDDEN_CLIENT_METHODS = {"post", "put", "patch", "delete"}
@@ -75,7 +115,12 @@ def test_new_tools_only_call_get():
 def test_new_tools_declare_get_verb():
     for relpath in NEW_READ_ONLY_TOOLS:
         source = (REPO_ROOT / "tools" / relpath).read_text(encoding="utf-8")
-        assert 'return "GET"' in source, f"{relpath} does not declare http_verb GET"
+        assert (
+            'return "GET"' in source
+            or "SimpleListTool" in source
+            or "SimpleGetByIdTool" in source
+            or "ListQvmVulnInstanceResultAssetsTool" in source
+        ), f"{relpath} does not declare or inherit http_verb GET"
 
 
 def test_allowlist_contains_only_read_only_posts():
@@ -85,6 +130,7 @@ def test_allowlist_contains_only_read_only_posts():
     # The non-mutating Ariel POST tools must be allowlisted.
     assert "CreateArielSearchTool" in allowlist
     assert "ValidateAQLTool" in allowlist
+    assert "InvestigateOffenseEventsTool" in allowlist
 
     # Mutating (DELETE) tools must never be allowlisted.
     assert "DeleteArielSearchTool" not in allowlist
@@ -100,6 +146,11 @@ def test_allowlist_contains_only_read_only_posts():
     assert config["group_toggles"]["data_classification"] is True
     assert config["group_toggles"]["health_data"] is True
     assert config["group_toggles"]["help"] is True
+    assert config["group_toggles"]["offense"] is True
+    assert config["group_toggles"]["reference_data"] is True
+    assert config["group_toggles"]["qvm"] is True
+    assert config["group_toggles"]["forensics"] is True
+    assert config["group_toggles"]["composite"] is True
 
 
 def _fake_tool(class_name, verb, group):
@@ -119,9 +170,13 @@ def test_manager_enforces_allowlist(tmp_path):
     config = {
         "read_only_mode": True,
         "verb_toggles": {"GET": True, "POST": False, "DELETE": False},
-        "group_toggles": {"ariel": True, "offense": True, "reference_data": True},
+        "group_toggles": {"ariel": True, "offense": True, "reference_data": True, "composite": True},
         "per_tool_toggles": {},
-        "read_only_post_allowlist": ["CreateArielSearchTool", "ValidateAQLTool"],
+        "read_only_post_allowlist": [
+            "CreateArielSearchTool",
+            "ValidateAQLTool",
+            "InvestigateOffenseEventsTool",
+        ],
     }
     config_path = tmp_path / "feature_toggles.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
@@ -131,6 +186,7 @@ def test_manager_enforces_allowlist(tmp_path):
     # Allowlisted, non-mutating POST tools -> enabled (group must be on).
     assert manager.is_tool_enabled(_fake_tool("CreateArielSearchTool", "POST", "ariel")) is True
     assert manager.is_tool_enabled(_fake_tool("ValidateAQLTool", "POST", "ariel")) is True
+    assert manager.is_tool_enabled(_fake_tool("InvestigateOffenseEventsTool", "POST", "composite")) is True
 
     # Mutating Ariel tool (DELETE) -> blocked even though group is enabled.
     assert manager.is_tool_enabled(_fake_tool("DeleteArielSearchTool", "DELETE", "ariel")) is False

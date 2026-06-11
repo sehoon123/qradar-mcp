@@ -25,11 +25,16 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 USER appuser
 
-# Set Python path to include qradar-mcp directory
-ENV PYTHONPATH=/opt/app-root/qradar-mcp
+# Set Python path and container bind defaults
+ENV PYTHONPATH=/opt/app-root/qradar-mcp \
+    MCP_HOST=0.0.0.0 \
+    MCP_PORT=5000
 
 # Expose MCP server port
 EXPOSE 5000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${MCP_PORT:-5000}/healthz" || exit 1
 
 # Set working directory to qradar-mcp
 WORKDIR /opt/app-root/qradar-mcp

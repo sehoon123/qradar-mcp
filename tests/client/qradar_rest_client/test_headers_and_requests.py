@@ -80,6 +80,40 @@ class TestQRadarRestClientAddHeaders:
         assert headers["Version"] == "14.0"
 
     @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_add_headers_with_configured_api_version(self, mock_load_config):
+        """Test _add_headers uses configured API version by default."""
+        mock_config = {
+            "qradar": {
+                "host": "https://qradar.local",
+                "sec_token": "test_token",
+                "api_version": "27.0"
+            }
+        }
+        mock_load_config.return_value = mock_config
+
+        client = QRadarRestClient()
+        headers = client._add_headers({})
+
+        assert headers["Version"] == "27.0"
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_add_headers_explicit_version_overrides_configured_api_version(self, mock_load_config):
+        """Test explicit per-call API version takes precedence."""
+        mock_config = {
+            "qradar": {
+                "host": "https://qradar.local",
+                "sec_token": "test_token",
+                "api_version": "27.0"
+            }
+        }
+        mock_load_config.return_value = mock_config
+
+        client = QRadarRestClient()
+        headers = client._add_headers({}, version="26.0")
+
+        assert headers["Version"] == "26.0"
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
     def test_add_headers_preserves_existing_headers(self, mock_load_config):
         """Test that _add_headers preserves existing headers."""
         mock_config = {
@@ -194,3 +228,56 @@ class TestQRadarRestClientGet:
 
         call_args = mock_client.get.call_args
         assert call_args[1]["timeout"] == 30
+
+    @pytest.mark.asyncio
+    @patch('qradar_mcp.utils.retry.asyncio.sleep')
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    async def test_get_retries_retryable_response_status(self, mock_load_config, mock_sleep):
+        """Test GET retries when QRadar returns a retryable status."""
+        mock_config = {
+            "qradar": {
+                "host": "qradar.local",
+                "sec_token": "test_token"
+            }
+        }
+        mock_load_config.return_value = mock_config
+        mock_sleep.return_value = None
+
+        request = httpx.Request("GET", "https://qradar.local/api/siem/offenses")
+        retryable_response = httpx.Response(503, request=request)
+        success_response = httpx.Response(200, request=request)
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.get = AsyncMock(side_effect=[retryable_response, success_response])
+
+        client = QRadarRestClient(client=mock_client)
+        response = await client.get("siem/offenses")
+
+        assert response.status_code == 200
+        assert mock_client.get.call_count == 2
+
+    @pytest.mark.asyncio
+    @patch('qradar_mcp.utils.retry.asyncio.sleep')
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    async def test_get_does_not_retry_non_retryable_response_status(self, mock_load_config, mock_sleep):
+        """Test GET returns non-retryable statuses for tool-specific handling."""
+        mock_config = {
+            "qradar": {
+                "host": "qradar.local",
+                "sec_token": "test_token"
+            }
+        }
+        mock_load_config.return_value = mock_config
+        mock_sleep.return_value = None
+
+        request = httpx.Request("GET", "https://qradar.local/api/siem/offenses")
+        validation_response = httpx.Response(422, request=request)
+
+        mock_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_client.get = AsyncMock(return_value=validation_response)
+
+        client = QRadarRestClient(client=mock_client)
+        response = await client.get("siem/offenses")
+
+        assert response.status_code == 422
+        assert mock_client.get.call_count == 1

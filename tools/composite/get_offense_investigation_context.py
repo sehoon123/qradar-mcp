@@ -168,7 +168,7 @@ intended for safe triage workflows where data must not be changed."""
             return {"error": error, "items": []}
         return {"count": len(notes or []), "items": notes or []}
 
-    async def _safe_get_collection_by_ids(
+    async def _safe_get_collection_by_ids(  # pylint: disable=too-many-positional-arguments
         self,
         path: str,
         item_ids: List[int],

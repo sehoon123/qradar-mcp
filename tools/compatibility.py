@@ -47,6 +47,9 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Set, Tuple
 
+from qradar_mcp.tools.endpoint_registry import compatibility_registry_from_specs
+from qradar_mcp.utils.structured_logger import log_structured
+
 # ---------------------------------------------------------------------------
 # Compatibility registry: tool class name -> requirements.
 #
@@ -56,11 +59,12 @@ from typing import Dict, List, Optional, Set, Tuple
 #   read_only          : True if the tool does not mutate QRadar data.
 #   side_effect        : optional note on non-mutating side effects (honesty).
 #
-# Tools absent from this registry are ungated (always allowed). Paths are taken
-# verbatim from each tool's client call; normalize_path() absorbs leading-slash,
-# "/api/" prefix and placeholder-name differences when matching the catalog.
+# This legacy dict is merged with the EndpointSpec registry below. Paths are
+# taken verbatim from each tool's client call; normalize_path() absorbs
+# leading-slash, "/api/" prefix and placeholder-name differences when matching
+# the catalog.
 # ---------------------------------------------------------------------------
-COMPATIBILITY_REGISTRY: Dict[str, Dict] = {
+COMPATIBILITY_REGISTRY: Dict[str, Dict] = {  # pylint: disable=invalid-name
     # Ariel metadata (AQL authoring helpers)
     "ListArielDatabasesTool": {
         "required_endpoints": [("GET", "/ariel/databases")],
@@ -204,6 +208,7 @@ COMPATIBILITY_REGISTRY: Dict[str, Dict] = {
         "read_only": True,
     },
 }
+COMPATIBILITY_REGISTRY = compatibility_registry_from_specs(COMPATIBILITY_REGISTRY)  # pylint: disable=invalid-name
 
 # The baseline API version this fork commits to supporting by default.
 BASELINE_API_VERSION = "24.0"
@@ -222,7 +227,6 @@ _HELP_ENDPOINTS_MAX = 100000
 def _log(message: str, level: str = "INFO", **kwargs) -> None:
     """Best-effort structured logging that never fails if the logger is absent."""
     try:  # pragma: no cover - logging is environmental
-        from qradar_mcp.utils.structured_logger import log_structured
         log_structured(message, level=level, **kwargs)
     except Exception:  # pylint: disable=broad-exception-caught
         pass

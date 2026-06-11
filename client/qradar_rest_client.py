@@ -13,11 +13,11 @@
 # limitations under the License.
 
 
-import json
 import os
 from typing import Dict, Optional
 import httpx
-from qradar_mcp.utils.retry import retry_on_failure_async
+from qradar_mcp.settings import load_raw_config, load_settings, parse_bool
+from qradar_mcp.utils.retry import RetryConfig, retry_on_failure_async
 from qradar_mcp.utils.structured_logger import log_structured
 from qradar_mcp.utils.mcp_logger import log_mcp
 from qradar_mcp.auth_context import get_request_auth_tokens
@@ -28,11 +28,7 @@ SEC_HEADER = 'SEC'
 
 def load_config():
     """Load configuration from config.json file."""
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')
-    if os.path.exists(config_path):
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return None
+    return load_raw_config()
 
 
 class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
@@ -67,21 +63,26 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
 
         if self.config:
             # Local development mode
-            self._url = self.config['qradar']['host']
-            self._sec_token = self.config['qradar'].get('sec_token')
-            self._csrf_token = self.config['qradar'].get('csrf_token')
-            self._authorized_service_token = self.config['qradar'].get('authorized_service_token')
-            self._verify_ssl = self.config['qradar'].get('verify_ssl', False)
-            self._proxy = self.config['qradar'].get('proxy')
+            settings = load_settings(self.config)
+            self._url = settings.qradar.host
+            self._sec_token = settings.qradar.sec_token
+            self._csrf_token = settings.qradar.csrf_token
+            self._authorized_service_token = settings.qradar.authorized_service_token
+            self._verify_ssl = settings.qradar.verify_ssl
+            self._api_version = settings.qradar.api_version
+            self._proxy = settings.qradar.proxy
             self._local_mode = True
         else:
             # QRadar App mode
             self._url = os.getenv('QRADAR_CONSOLE_FQDN')
             self._sec_token = None
             self._csrf_token = None
+            self._authorized_service_token = None
             self._is_fvt_env = os.getenv('FUNCTIONAL_TEST_ENV') is not None
             self._cert_path = os.getenv('REQUESTS_CA_BUNDLE')
             self._proxy = os.getenv('QRADAR_REST_PROXY')
+            self._api_version = os.getenv('QRADAR_API_VERSION')
+            self._verify_ssl = parse_bool(os.getenv('QRADAR_VERIFY_SSL'), True)
             self._local_mode = False
 
         # Use provided client or shared client
@@ -125,8 +126,7 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
         if hasattr(self, '_cert_path') and self._cert_path:
             # Will use the certificate path defined at this location.
             return self._cert_path
-        # Default to not verifying in local dev
-        return False
+        return self._verify_ssl
 
     @retry_on_failure_async(max_attempts=3, backoff_factor=2.0)
     async def get(self, api_path, headers=None, params=None, version=None, timeout=None):  # pylint: disable=too-many-positional-arguments
@@ -154,12 +154,13 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
         )
 
         client = self._get_client()
-        return await client.get(
+        response = await client.get(
             url=full_url,
             headers=headers,
             timeout=timeout,
             params=params
         )
+        return self._raise_for_retryable_status(response)
 
     @retry_on_failure_async(max_attempts=3, backoff_factor=2.0)
     async def post(self, api_path, headers=None, params=None, data=None, version=None, timeout=None):  # pylint: disable=too-many-positional-arguments,too-many-arguments
@@ -193,20 +194,23 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
 
         client = self._get_client()
         if isinstance(data, dict):
-            return await client.post(
+            response = await client.post(
                 url=full_url,
                 headers=headers,
                 timeout=timeout,
                 params=params,
                 json=data
             )
-        return await client.post(
-            url=full_url,
-            headers=headers,
-            timeout=timeout,
-            params=params,
-            content=data
-        )
+        else:
+            response = await client.post(
+                url=full_url,
+                headers=headers,
+                timeout=timeout,
+                params=params,
+                content=data
+            )
+
+        return self._raise_for_retryable_status(response)
 
     @retry_on_failure_async(max_attempts=3, backoff_factor=2.0)
     async def delete(self, api_path, headers=None, params=None, version=None, timeout=None):  # pylint: disable=too-many-positional-arguments
@@ -234,12 +238,13 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
         )
 
         client = self._get_client()
-        return await client.delete(
+        response = await client.delete(
             url=full_url,
             headers=headers,
             timeout=timeout,
             params=params
         )
+        return self._raise_for_retryable_status(response)
 
     def _add_headers(self, headers, version=None):
         """
@@ -255,11 +260,11 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
         In local mode, if authorized_service_token is configured, it takes priority
         over sec_token to simulate service authentication.
         """
-        if headers is None:
-            headers = {}
+        headers = dict(headers or {})
 
-        if version is not None:
-            headers['Version'] = version
+        api_version = version or self._api_version
+        if api_version:
+            headers['Version'] = api_version
 
         # Priority 1: Try to get auth tokens from request context (set by middleware)
         context_tokens = get_request_auth_tokens()
@@ -270,6 +275,13 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
             headers.update(self._local_mode_auth())
 
         return headers
+
+    @staticmethod
+    def _raise_for_retryable_status(response: httpx.Response) -> httpx.Response:
+        """Raise only for statuses that should be retried by the decorator."""
+        if response.status_code in RetryConfig.RETRYABLE_STATUS_CODES:
+            response.raise_for_status()
+        return response
 
     def _context_auth_mode(self, context_tokens: Dict[str, str]) -> Dict[str, str]:
         """

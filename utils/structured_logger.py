@@ -22,6 +22,7 @@ Provides structured logging with contextual information for better observability
 import time
 from typing import Dict, Any
 from .mcp_logger import log_mcp
+from .redaction import sanitize_for_logging
 
 # Import context variable getters from middleware
 from .request_context import (
@@ -103,7 +104,7 @@ class StructuredLogger:
         if content_type:
             context['content_type'] = content_type
         if query_params:
-            context['query_params'] = query_params
+            context['query_params'] = sanitize_for_logging(query_params)
 
         return context
 
@@ -118,7 +119,8 @@ class StructuredLogger:
             **extra_context: Additional context to include
         """
         context = StructuredLogger._get_context()
-        context.update(extra_context)
+        sanitized_extra = sanitize_for_logging(extra_context)
+        context.update(sanitized_extra)
 
         # Use MCP logger which handles both standalone and QRadar app mode
         log_mcp(message, level=level, **context)
@@ -158,18 +160,8 @@ class StructuredLogger:
         Returns:
             Sanitized arguments safe for logging
         """
-        sensitive_keys = ['password', 'token', 'secret', 'api_key', 'auth']
-        sanitized = {}
-
-        for key, value in arguments.items():
-            if any(sensitive in key.lower() for sensitive in sensitive_keys):
-                sanitized[key] = '***REDACTED***'
-            elif isinstance(value, str) and len(value) > 1000:
-                sanitized[key] = value[:1000] + '...[truncated]'
-            else:
-                sanitized[key] = value
-
-        return sanitized
+        sanitized = sanitize_for_logging(arguments)
+        return sanitized if isinstance(sanitized, dict) else {}
 
 
 # Convenience function

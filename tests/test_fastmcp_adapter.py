@@ -218,6 +218,30 @@ class TestAdapterRegistration:
         # The wrapper function should have the same description
         assert "offense" in tool.description.lower()
 
+    @pytest.mark.asyncio
+    async def test_json_content_returns_structured_data(self):
+        """Test JSON MCP content is returned as structured data through the wrapper."""
+
+        class JsonTool(GetOffenseTool):
+            @property
+            def name(self):
+                return "json_tool"
+
+            @property
+            def input_schema(self):
+                return {"type": "object", "properties": {}}
+
+            async def _execute_impl(self, arguments):
+                return self.create_json_response({"ok": True, "items": [1, 2]})
+
+        registered = []
+        mcp = Mock()
+        mcp.tool.return_value = lambda func: registered.append(func) or func
+
+        register_mcp_tool_with_fastmcp(mcp, JsonTool())
+
+        assert await registered[0]() == {"ok": True, "items": [1, 2]}
+
 
 class TestToolExecution:
     """Test tool execution through the adapter."""
@@ -376,7 +400,7 @@ class TestRegisterAllTools:
         return FeatureToggleManager(str(config_file))
 
     def test_all_tools_registered_when_all_enabled(self, all_enabled_config):
-        """Test that all 80 tools are registered when all toggles are enabled."""
+        """Test that all 121 tools are registered when all toggles are enabled."""
         from qradar_mcp.tools.fastmcp_adapter import register_all_tools
 
         mock_mcp = Mock()
@@ -385,8 +409,8 @@ class TestRegisterAllTools:
 
         registered_tools, skipped_tools = register_all_tools(mock_mcp, all_enabled_config, mock_qradar_client)
 
-        # Should register all 80 tools
-        assert len(registered_tools) == 80
+        # Should register all 121 tools
+        assert len(registered_tools) == 121
         assert len(skipped_tools) == 0
 
     def test_returns_tuple(self, all_enabled_config):
@@ -417,7 +441,7 @@ class TestRegisterAllTools:
         # Should have some registered and some skipped
         assert len(registered_tools) > 0
         assert len(skipped_tools) > 0
-        assert len(registered_tools) + len(skipped_tools) == 80
+        assert len(registered_tools) + len(skipped_tools) == 121
 
     def test_delete_verb_disabled_skips_delete_tools(self, some_disabled_config):
         """Test that tools with DELETE verb are skipped when DELETE is disabled."""
@@ -453,7 +477,7 @@ class TestRegisterAllTools:
 
         # Check that all qvm tools are in skipped list
         qvm_tools = [t for t in skipped_tools if t.tool_group == "qvm"]
-        assert len(qvm_tools) == 2  # There are 2 QVM tools
+        assert len(qvm_tools) == 14
 
     def test_per_tool_override_skips_specific_tool(self, some_disabled_config):
         """Test that per-tool override disables specific tool."""
@@ -489,8 +513,83 @@ class TestRegisterAllTools:
         # No overlap between registered and skipped
         assert len(registered_names & skipped_names) == 0
 
-        # All 80 tools accounted for
-        assert len(registered_names | skipped_names) == 80
+        # All 121 tools accounted for
+        assert len(registered_names | skipped_names) == 121
+
+    def test_read_only_mode_excludes_mutating_registration_candidates(self, tmp_path):
+        """Test read-only mode does not import/register QRadar-mutating tools."""
+        from qradar_mcp.tools.fastmcp_adapter import register_all_tools
+        from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
+
+        config_file = tmp_path / "feature_toggles.json"
+        config_file.write_text("""{
+            "read_only_mode": true,
+            "verb_toggles": {
+                "GET": true,
+                "POST": false,
+                "DELETE": false
+            },
+            "group_toggles": {
+                "offense": true,
+                "ariel": true,
+                "reference_data": true,
+                "asset": true,
+                "log_source": true,
+                "analytics": true,
+                "system": true,
+                "config": true,
+                "data_classification": true,
+                "health_data": true,
+                "help": true,
+                "services": true,
+                "composite": true,
+                "forensics": true,
+                "qvm": true
+            },
+            "read_only_post_allowlist": [
+                "CreateArielSearchTool",
+                "ValidateAQLTool",
+                "InvestigateOffenseEventsTool"
+            ],
+            "per_tool_toggles": {}
+        }""")
+
+        mock_mcp = Mock()
+        mock_mcp.tool = Mock(return_value=lambda func: func)
+        registered_tools, skipped_tools = register_all_tools(
+            mock_mcp,
+            FeatureToggleManager(str(config_file)),
+            AsyncMock(),
+        )
+
+        mutating_classes = {
+            "UpdateOffenseTool",
+            "AddOffenseNoteTool",
+            "DeleteArielSearchTool",
+            "DeleteSavedSearchTool",
+            "CreateReferenceSetTool",
+            "UpdateReferenceSetTool",
+            "DeleteReferenceSetTool",
+            "AddToReferenceSetTool",
+            "RemoveFromReferenceSetTool",
+            "CreateReferenceMap",
+            "AddToReferenceMap",
+            "DeleteReferenceMap",
+            "RemoveFromReferenceMap",
+            "CreateReferenceTable",
+            "AddToReferenceTable",
+            "DeleteReferenceTable",
+            "RemoveFromReferenceTable",
+        }
+        candidate_classes = {type(tool).__name__ for tool in registered_tools + skipped_tools}
+        assert candidate_classes.isdisjoint(mutating_classes)
+
+        registered_non_get = {type(tool).__name__ for tool in registered_tools if tool.http_verb != "GET"}
+        assert registered_non_get == {
+            "CreateArielSearchTool",
+            "ValidateAQLTool",
+            "InvestigateOffenseEventsTool",
+        }
 
 
 if __name__ == "__main__":

@@ -23,6 +23,8 @@ Supports both synchronous and asynchronous functions.
 import time
 import asyncio
 import functools
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
 from typing import Callable, Optional, Tuple, Type
 
 import httpx
@@ -55,7 +57,11 @@ def retry_on_failure(
     initial_delay: float = RetryConfig.INITIAL_DELAY,
     max_delay: float = RetryConfig.MAX_DELAY,
     *,
-    retryable_exceptions: Tuple[Type[Exception], ...] = (httpx.HTTPStatusError,),
+    retryable_exceptions: Tuple[Type[Exception], ...] = (
+        httpx.HTTPStatusError,
+        httpx.ConnectError,
+        httpx.TimeoutException,
+    ),
     retryable_status_codes: Optional[set] = None
 ):
     """
@@ -102,7 +108,7 @@ def retry_on_failure(
                         raise e
 
                     # Calculate delay and wait before next attempt
-                    delay = _calculate_delay(attempt, initial_delay, backoff_factor, max_delay)
+                    delay = _calculate_retry_delay(e, attempt, initial_delay, backoff_factor, max_delay)
                     _log_retry_attempt(attempt, max_attempts, func.__name__, delay, e)
                     time.sleep(delay)
 
@@ -118,7 +124,11 @@ def retry_on_failure_async(
     initial_delay: float = RetryConfig.INITIAL_DELAY,
     max_delay: float = RetryConfig.MAX_DELAY,
     *,
-    retryable_exceptions: Tuple[Type[Exception], ...] = (httpx.HTTPStatusError,),
+    retryable_exceptions: Tuple[Type[Exception], ...] = (
+        httpx.HTTPStatusError,
+        httpx.ConnectError,
+        httpx.TimeoutException,
+    ),
     retryable_status_codes: Optional[set] = None
 ):
     """
@@ -166,7 +176,7 @@ def retry_on_failure_async(
                         raise e
 
                     # Calculate delay and wait before next attempt
-                    delay = _calculate_delay(attempt, initial_delay, backoff_factor, max_delay)
+                    delay = _calculate_retry_delay(e, attempt, initial_delay, backoff_factor, max_delay)
                     _log_retry_attempt(attempt, max_attempts, func.__name__, delay, e)
                     await asyncio.sleep(delay)
 
@@ -213,6 +223,46 @@ def _calculate_delay(attempt: int, initial_delay: float, backoff_factor: float, 
         Delay in seconds, capped at max_delay
     """
     return min(initial_delay * (backoff_factor ** (attempt - 1)), max_delay)
+
+
+def _calculate_retry_delay(
+    exception: Exception,
+    attempt: int,
+    initial_delay: float,
+    backoff_factor: float,
+    max_delay: float
+) -> float:
+    """Calculate retry delay, honoring Retry-After when present."""
+    retry_after_delay = _retry_after_delay(exception)
+    if retry_after_delay is not None:
+        return min(retry_after_delay, max_delay)
+
+    return _calculate_delay(attempt, initial_delay, backoff_factor, max_delay)
+
+
+def _retry_after_delay(exception: Exception) -> Optional[float]:
+    """Extract a Retry-After delay from an HTTP error, if available."""
+    if not isinstance(exception, httpx.HTTPStatusError):
+        return None
+
+    retry_after = exception.response.headers.get("Retry-After")
+    if retry_after is None:
+        return None
+
+    try:
+        return max(float(retry_after), 0.0)
+    except ValueError:
+        pass
+
+    try:
+        retry_at = parsedate_to_datetime(retry_after)
+    except (TypeError, ValueError):
+        return None
+
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=timezone.utc)
+
+    return max((retry_at - datetime.now(timezone.utc)).total_seconds(), 0.0)
 
 
 def _log_retry_attempt(attempt: int, max_attempts: int, func_name: str, delay: float, exception: Exception) -> None:

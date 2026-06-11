@@ -37,8 +37,11 @@ certifi==2026.4.22
     # via
     #   httpcore
     #   httpx
+    #   requests
 cffi==2.0.0
     # via cryptography
+charset-normalizer==3.4.7
+    # via requests
 click==8.3.3
     # via uvicorn
 coverage[toml]==7.13.5
@@ -87,6 +90,7 @@ idna==3.13
     #   anyio
     #   email-validator
     #   httpx
+    #   requests
 importlib-metadata==8.7.1
     # via
     #   keyring
@@ -199,6 +203,8 @@ referencing==0.37.0
     #   jsonschema
     #   jsonschema-path
     #   jsonschema-specifications
+requests==2.34.2
+    # via qradar-mcp (pyproject.toml)
 rich==15.0.0
     # via
     #   cyclopts
@@ -240,6 +246,8 @@ typing-inspection==0.4.2
     #   pydantic-settings
 uncalled-for==0.3.1
     # via fastmcp
+urllib3==2.7.0
+    # via requests
 uvicorn==0.46.0
     # via
     #   fastmcp

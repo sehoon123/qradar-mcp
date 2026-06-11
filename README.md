@@ -44,14 +44,14 @@ qradar-mcp/
 
 ## Tool Coverage
 
-The adapter currently tracks 80 tool implementations. The default
+The adapter currently tracks 121 tool implementations. The default
 `feature_toggles.json` profile registers the read-only-safe subset and skips
-mutating tools.
+QRadar-mutating tools before they are imported as registration candidates.
 
 Enabled read-only areas include:
 
 - Offenses and offense context
-- Ariel searches, saved searches, AQL validation, and Ariel metadata
+- Ariel searches, saved searches, search metadata, AQL validation, and Ariel metadata
 - Reference data reads
 - Assets and asset properties
 - Log sources and log source types
@@ -59,11 +59,11 @@ Enabled read-only areas include:
 - System and access metadata
 - Network hierarchy, domains, regex properties, and calculated properties
 - QID records, DSM event mappings, and event categories
-- Health data summaries
-- QRadar API endpoint discovery
-- Forensics cases
-- QVM vulnerabilities and assets
-- Composite offense investigation context
+- Health data summaries and health metrics
+- QRadar API endpoint, version, and resource discovery
+- Forensics cases, capture recoveries, and recovery tasks
+- QVM vulnerabilities, assets, filters, saved searches, and vuln-instance result workflows
+- Composite offense investigation context and Ariel event evidence workflow
 
 Network service tools are present but disabled by default in the read-only local
 profile.
@@ -133,7 +133,8 @@ Recommended local authentication is an authorized service token:
     "csrf_token": "",
     "authorized_service_token": "YOUR_AUTHORIZED_SERVICE_TOKEN",
     "app_id": "",
-    "verify_ssl": false,
+    "verify_ssl": true,
+    "api_version": "27.0",
     "proxy": null
   },
   "server": {
@@ -149,8 +150,10 @@ Notes:
 - `qradar.host` can include or omit `https://`; the client calls QRadar over
   HTTPS.
 - Do not include `/api` in `qradar.host`.
-- Use `verify_ssl: true` when your local trust store can validate the QRadar
-  certificate.
+- `qradar.api_version` is sent as the QRadar `Version` header on every API
+  request. Set it to the API version supported by your console.
+- `verify_ssl` defaults to `true`. Set it to `false` only for lab or
+  self-signed certificate environments.
 - User session auth is also supported with `sec_token` and `csrf_token`.
 
 ### 5. Run the server
@@ -208,6 +211,13 @@ You can override the target URL with `MCP_BASE_URL`, for example:
 MCP_BASE_URL=http://127.0.0.1:5002 python tests/local_mcp_connection.py
 ```
 
+Process health endpoints are also available:
+
+```text
+GET /healthz  # process liveness, no QRadar API call
+GET /readyz   # server initialization checks, no QRadar API call
+```
+
 ## MCP Client Configuration
 
 Point your MCP client at:
@@ -242,7 +252,8 @@ Important default settings in this fork:
   },
   "read_only_post_allowlist": [
     "CreateArielSearchTool",
-    "ValidateAQLTool"
+    "ValidateAQLTool",
+    "InvestigateOffenseEventsTool"
   ]
 }
 ```
@@ -281,14 +292,46 @@ docker run -d \
   qradar-mcp:latest
 ```
 
+The image and compose file include a healthcheck against `/healthz`. Use
+`/readyz` when an orchestrator should also verify that QRadar host settings and
+the shared HTTP client were initialized.
+
+## API Version and Permissions
+
+Set `qradar.api_version` in `config.json` or `QRADAR_API_VERSION` in the
+environment. The value is sent as the QRadar `Version` header on every REST API
+request. Pin this to a version supported by your console, such as `27.0` for
+current QRadar 7.5 deployments, instead of relying on QRadar's implicit latest
+API behavior.
+
+Permission and module expectations vary by console version and deployment:
+
+| Area | Main endpoints | Expected access |
+| --- | --- | --- |
+| Help discovery | `/help/versions`, `/help/endpoints`, `/help/resources` | API documentation visibility |
+| Offenses | `/siem/offenses`, notes, actors, saved searches | SIEM offense read access |
+| Ariel | `/ariel/searches`, validators, metadata, results | Ariel event or flow search access |
+| Reference data | `/reference_data_collections/*` | Reference data read access |
+| Assets/log sources/rules | `/asset_model/*`, `/config/*`, `/analytics/*` | Corresponding QRadar configuration read access |
+| Health metrics | `/health/*` | Health data or administrative read access |
+| QVM | `/qvm/*` | QVM license/module and vulnerability read access |
+| Forensics | `/forensics/*` | Forensics license/module and case read access |
+
+The default read-only profile still allowlists transient `POST` calls for AQL
+validation, Ariel search creation, and the composite Ariel evidence workflow.
+These create or inspect short-lived search jobs but do not mutate QRadar data.
+
 ## Development
 
 Install development dependencies when you want to run the full test suite:
 
 ```bash
 python -m pip install -e ".[dev]"
-python -m pytest tests
+python -m pytest tests --cov=qradar_mcp --cov-report=term-missing
 ```
+
+Coverage has an 80% minimum gate in `pyproject.toml`. GitHub Actions runs the
+same coverage check plus pylint on pushes and pull requests.
 
 Useful focused checks for the read-only fork:
 
@@ -296,6 +339,7 @@ Useful focused checks for the read-only fork:
 python -m pytest tests/test_read_only_allowlist.py
 python -m pytest tests/test_compatibility.py
 python -m pytest tests/test_composite_read_only.py
+python -m pytest tests/test_endpoint_registry.py
 ```
 
 ## Troubleshooting
@@ -308,7 +352,8 @@ python -m pytest tests/test_composite_read_only.py
   URL used by your MCP client.
 - `401` or authentication errors: refresh the QRadar token or verify that the
   authorized service token is still valid.
-- SSL errors in a lab: set `verify_ssl: false`. Prefer `true` for production.
+- SSL errors in a lab: set `verify_ssl: false` only when the local trust store
+  cannot validate the QRadar certificate.
 - Tool reports unsupported endpoint: the compatibility gate did not find that
   endpoint in the connected QRadar console's `/help/endpoints` catalog.
 
@@ -320,6 +365,9 @@ python -m pytest tests/test_composite_read_only.py
 - Keep `read_only_mode` enabled for no-mutation operation.
 - Do not enable `DELETE` or non-allowlisted `POST` tools unless you explicitly
   intend to allow QRadar data changes.
+- Audit and structured logs redact credentials and summarize AQL, filter, and
+  note content by length and hash instead of recording raw SOC investigation
+  data.
 
 ## License
 

@@ -125,4 +125,3 @@ adding new MCP tools or when checking whether a GET endpoint exists."""
             if summary:
                 lines.append(f"  {summary}")
         return "\n".join(lines)
-

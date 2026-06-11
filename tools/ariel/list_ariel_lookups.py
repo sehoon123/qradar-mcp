@@ -79,4 +79,3 @@ when interpreting Ariel results or deciding which lookup to inspect by name."""
             if lookup.get("default_value") is not None:
                 lines.append(f"  Default: {lookup.get('default_value')}")
         return "\n".join(lines)
-
