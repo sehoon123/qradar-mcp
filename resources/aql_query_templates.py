@@ -25,7 +25,7 @@ class AQLQueryTemplatesResource(MCPResource):
     def mime_type(self) -> str:
         return "application/json"
 
-    def read(self) -> Dict[str, Any]:
+    async def read(self) -> Dict[str, Any]:
         templates = {
             "workflow": [
                 "Read qradar://aql/fields/events or qradar://aql/fields/flows first.",

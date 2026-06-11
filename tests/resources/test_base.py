@@ -2,8 +2,11 @@
 Tests for MCP Resource base class
 """
 
+import inspect
 import pytest
 from qradar_mcp.resources.base import MCPResource
+
+pytestmark = pytest.mark.asyncio
 
 
 class ConcreteResource(MCPResource):
@@ -25,7 +28,7 @@ class ConcreteResource(MCPResource):
     def mime_type(self) -> str:
         return "application/json"
 
-    def read(self):
+    async def read(self):
         return {
             "contents": [
                 {
@@ -40,40 +43,44 @@ class ConcreteResource(MCPResource):
 class TestMCPResource:
     """Test MCPResource base class."""
 
-    def test_cannot_instantiate_abstract_class(self):
+    async def test_cannot_instantiate_abstract_class(self):
         """Test that MCPResource cannot be instantiated directly."""
         with pytest.raises(TypeError):
             MCPResource()  # type: ignore
 
-    def test_concrete_implementation_has_uri(self):
+    async def test_concrete_implementation_has_uri(self):
         """Test that concrete implementation has uri property."""
         resource = ConcreteResource()
         assert resource.uri == "qradar://test/resource"
 
-    def test_concrete_implementation_has_name(self):
+    async def test_concrete_implementation_has_name(self):
         """Test that concrete implementation has name property."""
         resource = ConcreteResource()
         assert resource.name == "Test Resource"
 
-    def test_concrete_implementation_has_description(self):
+    async def test_concrete_implementation_has_description(self):
         """Test that concrete implementation has description property."""
         resource = ConcreteResource()
         assert resource.description == "A test resource"
 
-    def test_concrete_implementation_has_mime_type(self):
+    async def test_concrete_implementation_has_mime_type(self):
         """Test that concrete implementation has mime_type property."""
         resource = ConcreteResource()
         assert resource.mime_type == "application/json"
 
-    def test_concrete_implementation_can_read(self):
+    async def test_concrete_implementation_can_read(self):
         """Test that concrete implementation can read."""
         resource = ConcreteResource()
-        result = resource.read()
+        result = await resource.read()
         assert "contents" in result
         assert len(result["contents"]) == 1
         assert result["contents"][0]["uri"] == "qradar://test/resource"
 
-    def test_to_dict_returns_metadata(self):
+    async def test_read_contract_is_async(self):
+        """Test that the resource base contract is async."""
+        assert inspect.iscoroutinefunction(MCPResource.read)
+
+    async def test_to_dict_returns_metadata(self):
         """Test that to_dict returns resource metadata."""
         resource = ConcreteResource()
         metadata = resource.to_dict()
@@ -83,7 +90,7 @@ class TestMCPResource:
         assert metadata["description"] == "A test resource"
         assert metadata["mimeType"] == "application/json"
 
-    def test_to_dict_structure(self):
+    async def test_to_dict_structure(self):
         """Test that to_dict returns correct structure."""
         resource = ConcreteResource()
         metadata = resource.to_dict()

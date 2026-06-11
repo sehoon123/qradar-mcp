@@ -331,7 +331,7 @@ def register_resources():
         async def aql_events_fields() -> str:
             """AQL Events table field definitions"""
             resource = AQLEventsFieldsResource()
-            result = resource.read()
+            result = await resource.read()
             return result["contents"][0]["text"]
         registered_resources.append('aql_events_fields')
     else:
@@ -343,7 +343,7 @@ def register_resources():
         async def aql_flows_fields() -> str:
             """AQL Flows table field definitions"""
             resource = AQLFlowsFieldsResource()
-            result = resource.read()
+            result = await resource.read()
             return result["contents"][0]["text"]
         registered_resources.append('aql_flows_fields')
     else:
@@ -355,7 +355,7 @@ def register_resources():
         async def aql_functions() -> str:
             """AQL function reference"""
             resource = AQLFunctionsResource()
-            result = resource.read()
+            result = await resource.read()
             return result["contents"][0]["text"]
         registered_resources.append('aql_functions')
     else:
@@ -367,7 +367,7 @@ def register_resources():
         async def aql_generation_guide() -> str:
             """AQL query generation guide"""
             resource = AQLGenerationGuideResource()
-            result = resource.read()
+            result = await resource.read()
             return result["contents"][0]["text"]
         registered_resources.append('aql_generation_guide')
     else:
@@ -379,7 +379,7 @@ def register_resources():
         async def aql_query_templates() -> str:
             """AQL query templates"""
             resource = AQLQueryTemplatesResource()
-            result = resource.read()
+            result = await resource.read()
             return result["contents"][0]["text"]
         registered_resources.append('aql_query_templates')
     else:

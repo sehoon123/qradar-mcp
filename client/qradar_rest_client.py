@@ -324,9 +324,17 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
 
     def _generate_full_url(self, api_path):
         """Generate the full URL for the API request."""
-        # Strip protocol if present in URL
-        url = self._url.replace('https://', '').replace('http://', '') # NOSONAR
-        return f"https://{url}/api/{api_path}"
+        if not self._url:
+            raise RuntimeError("QRadar console URL is not configured")
+
+        base_url = self._url.strip().rstrip('/')
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = f"https://{base_url}"
+
+        api_path = str(api_path).lstrip('/')
+        if base_url.endswith('/api'):
+            return f"{base_url}/{api_path}"
+        return f"{base_url}/api/{api_path}"
 
     def _get_proxy_url(self):
         """Get proxy URL for requests. Returns None if no proxy is configured."""

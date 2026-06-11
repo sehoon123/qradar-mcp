@@ -42,7 +42,7 @@ class AQLGenerationGuideResource(MCPResource):
     def mime_type(self) -> str:
         return "text/markdown"
 
-    def read(self) -> Dict[str, Any]:
+    async def read(self) -> Dict[str, Any]:
         """
         Return the AQL generation guide content.
 

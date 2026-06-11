@@ -132,6 +132,65 @@ class TestQRadarRestClientAddHeaders:
         assert headers["SEC"] == "test_token"
 
 
+class TestQRadarRestClientUrlGeneration:
+    """Tests for QRadar API URL generation."""
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_generate_full_url_defaults_to_https_when_scheme_omitted(self, mock_load_config):
+        """Test hosts without a scheme keep the historical HTTPS default."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "qradar.local",
+                "sec_token": "test_token"
+            }
+        }
+
+        client = QRadarRestClient()
+
+        assert client._generate_full_url("siem/offenses") == "https://qradar.local/api/siem/offenses"
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_generate_full_url_preserves_explicit_http_scheme(self, mock_load_config):
+        """Test internal HTTP QRadar consoles are not forced to HTTPS."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "http://192.168.1.10",
+                "sec_token": "test_token"
+            }
+        }
+
+        client = QRadarRestClient()
+
+        assert client._generate_full_url("siem/offenses") == "http://192.168.1.10/api/siem/offenses"
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_generate_full_url_normalizes_leading_slash(self, mock_load_config):
+        """Test API paths with leading slash do not create double slashes."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "http://192.168.1.10",
+                "sec_token": "test_token"
+            }
+        }
+
+        client = QRadarRestClient()
+
+        assert client._generate_full_url("/ariel/searches") == "http://192.168.1.10/api/ariel/searches"
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_generate_full_url_tolerates_host_with_api_suffix(self, mock_load_config):
+        """Test accidental /api suffix is not duplicated."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "http://192.168.1.10/api/",
+                "sec_token": "test_token"
+            }
+        }
+
+        client = QRadarRestClient()
+
+        assert client._generate_full_url("/help/endpoints") == "http://192.168.1.10/api/help/endpoints"
+
 
 class TestQRadarRestClientGet:
     """Tests for get method."""

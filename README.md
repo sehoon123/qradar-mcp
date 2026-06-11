@@ -128,7 +128,7 @@ Recommended local authentication is an authorized service token:
 ```json
 {
   "qradar": {
-    "host": "qradar.example.com",
+    "host": "http://192.168.1.10",
     "sec_token": "",
     "csrf_token": "",
     "authorized_service_token": "YOUR_AUTHORIZED_SERVICE_TOKEN",
@@ -147,9 +147,11 @@ Recommended local authentication is an authorized service token:
 
 Notes:
 
-- `qradar.host` can include or omit `https://`; the client calls QRadar over
-  HTTPS.
-- Do not include `/api` in `qradar.host`.
+- `qradar.host` can include `http://` or `https://`. The client preserves an
+  explicit scheme, which supports internal lab consoles such as
+  `http://192.168.x.x`. If the scheme is omitted, HTTPS is used by default.
+- Do not include `/api` in `qradar.host`; the client tolerates it but normalizes
+  API paths internally.
 - `qradar.api_version` is sent as the QRadar `Version` header on every API
   request. Set it to the API version supported by your console.
 - `verify_ssl` defaults to `true`. Set it to `false` only for lab or
