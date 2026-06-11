@@ -149,10 +149,14 @@ class FeatureToggleManager:
         # enabled accidentally. The only exception is tools explicitly listed
         # in read_only_post_allowlist, which use a non-GET verb but do not
         # mutate QRadar data (e.g. Ariel search creation/validation). For
-        # those, the verb gate is bypassed and enablement is decided solely by
-        # the tool's group toggle.
+        # those, the verb gate is bypassed, per-tool false still disables the
+        # tool, and enablement then depends on the tool's group toggle.
         if self.read_only_mode and tool.http_verb != 'GET':
-            if tool.__class__.__name__ not in self.read_only_post_allowlist:
+            tool_class_name = tool.__class__.__name__
+            if tool_class_name not in self.read_only_post_allowlist:
+                return False
+            override_value = self.per_tool_toggles.get(tool_class_name)
+            if override_value is False:
                 return False
             return self.group_toggles.get(tool.tool_group, False)
 

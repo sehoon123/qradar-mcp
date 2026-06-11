@@ -69,11 +69,16 @@ for module_name in (
     subprocess.run([sys.executable, "-c", code], check=True, capture_output=True, text=True)
 
 
-def test_public_capabilities_are_a_small_subset_of_endpoint_catalog():
+def test_public_capabilities_are_a_small_surface():
     """EndpointSpec is the internal catalog; CapabilitySpec is the public surface."""
     assert len(ENDPOINT_SPECS) > 100
     assert 1 < len(CAPABILITY_SPECS) < 20
-    assert set(CAPABILITY_SPECS).issubset(set(ENDPOINT_SPECS))
+
+
+def test_capability_endpoints_are_declared():
+    """Capabilities may be pure workflows, but they must declare dependencies."""
+    for spec in CAPABILITY_SPECS.values():
+        assert spec.required_endpoints
 
 
 def test_all_capability_specs_resolve_to_tool_classes():
@@ -97,6 +102,20 @@ def test_register_all_tools_uses_capabilities_not_endpoint_specs(tmp_path):
     assert "GetArielSearchResultsTool" not in registered_class_names
     assert "GetOffenseNotesTool" in ENDPOINT_SPECS
     assert "GetOffenseNotesTool" not in registered_class_names
+
+
+def test_default_public_tool_names_are_expected(tmp_path):
+    registered_tools, _skipped_tools = _register(tmp_path, read_only_mode=True)
+
+    assert len(registered_tools) <= 10
+    assert {tool.name for tool in registered_tools} == {
+        "qradar_doctor",
+        "discover_qradar_endpoints",
+        "list_offenses",
+        "get_offense_investigation_context",
+        "investigate_offense_events",
+        "validate_aql",
+    }
 
 
 def test_feature_toggles_filter_public_capabilities_only(tmp_path):

@@ -15,7 +15,6 @@
 """Discover QRadar Endpoints Tool."""
 
 from typing import Any, Dict
-import json
 
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
@@ -93,7 +92,13 @@ adding new MCP tools or when checking whether a GET endpoint exists."""
         if arguments.get("format_output", False):
             return self.create_success_response(self._format_endpoints(endpoints))
 
-        return self.create_success_response(json.dumps(endpoints, indent=2))
+        return self.create_json_response({
+            "endpoints": endpoints,
+            "count": len(endpoints or []),
+            "limit": limit,
+            "offset": offset,
+            "filter": filter_expr,
+        })
 
     def _build_filter(self, arguments: Dict[str, Any]) -> str | None:
         filters = []

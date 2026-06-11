@@ -98,7 +98,9 @@ joserfc==1.6.4
 jsonref==1.1.0
     # via fastmcp
 jsonschema==4.26.0
-    # via mcp
+    # via
+    #   mcp
+    #   qradar-mcp (pyproject.toml)
 jsonschema-path==0.4.6
     # via fastmcp
 jsonschema-specifications==2025.9.1

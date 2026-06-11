@@ -207,3 +207,27 @@ def test_manager_enforces_allowlist(tmp_path):
 
     # Ordinary GET tool -> unaffected.
     assert manager.is_tool_enabled(_fake_tool("ListOffensesTool", "GET", "offense")) is True
+
+
+def test_manager_can_disable_allowlisted_post_with_per_tool_false(tmp_path):
+    from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
+
+    config = {
+        "read_only_mode": True,
+        "verb_toggles": {"GET": True, "POST": False, "DELETE": False},
+        "group_toggles": {"ariel": True, "composite": True},
+        "per_tool_toggles": {
+            "ValidateAQLTool": False,
+        },
+        "read_only_post_allowlist": [
+            "ValidateAQLTool",
+            "InvestigateOffenseEventsTool",
+        ],
+    }
+    config_path = tmp_path / "feature_toggles.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    manager = FeatureToggleManager(config_path=str(config_path))
+
+    assert manager.is_tool_enabled(_fake_tool("ValidateAQLTool", "POST", "ariel")) is False
+    assert manager.is_tool_enabled(_fake_tool("InvestigateOffenseEventsTool", "POST", "composite")) is True
