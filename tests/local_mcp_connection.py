@@ -55,9 +55,11 @@ def _build_base_url(config):
 
 def _auth_headers(config):
     qradar_config = config.get("qradar", {})
+    auth_config = config.get("auth", {})
     authorized_service_token = qradar_config.get("authorized_service_token") or ""
     sec_token = qradar_config.get("sec_token") or ""
     csrf_token = qradar_config.get("csrf_token") or ""
+    mcp_access_token = os.getenv("MCP_ACCESS_TOKEN") or auth_config.get("mcp_access_token") or ""
 
     headers = {}
     token_for_display = ""
@@ -71,6 +73,9 @@ def _auth_headers(config):
             token_for_display = sec_token
         if csrf_token:
             headers["QRadarCSRF"] = csrf_token
+
+    if mcp_access_token:
+        headers["Authorization"] = f"Bearer {mcp_access_token}"
 
     return headers, token_for_display
 

@@ -35,11 +35,11 @@ class TestValidateOffenseId:
     def test_valid_id(self):
         """Test with valid offense ID."""
         assert validate_offense_id(123) is True
-        assert validate_offense_id(0) is True
         assert validate_offense_id("456") is True
 
     def test_invalid_id(self):
         """Test with invalid offense ID."""
+        assert validate_offense_id(0) is False
         assert validate_offense_id(-1) is False
         assert validate_offense_id("abc") is False
         assert validate_offense_id(None) is False

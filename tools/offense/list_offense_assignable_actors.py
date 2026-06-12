@@ -28,7 +28,7 @@ class ListOffenseAssignableActorsTool(MCPTool):
         return (schema()
             .integer("offense_id")
                 .description("Offense ID")
-                .minimum(0)
+                .minimum(1)
                 .required()
             .string("fields")
                 .description("Optional comma-separated list of fields to return")
@@ -41,7 +41,7 @@ class ListOffenseAssignableActorsTool(MCPTool):
     async def _execute_impl(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         offense_id = arguments.get("offense_id")
         if not validate_offense_id(offense_id):
-            return self.create_error_response("Error: offense_id must be a non-negative integer")
+            return self.create_error_response("Error: offense_id must be a positive integer")
 
         params = {}
         if arguments.get("fields"):

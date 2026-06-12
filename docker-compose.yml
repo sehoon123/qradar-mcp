@@ -24,6 +24,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - MCP_HOST=0.0.0.0
       - MCP_PORT=5000
+      - MCP_ACCESS_TOKEN=${MCP_ACCESS_TOKEN:?Set MCP_ACCESS_TOKEN before running qradar-mcp with MCP_HOST=0.0.0.0}
       - PYTHONUNBUFFERED=1
     volumes:
       # Mount config where the local/Docker config loader expects it

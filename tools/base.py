@@ -33,7 +33,7 @@ from qradar_mcp.utils.error_handler import extract_qradar_error
 from qradar_mcp.utils.feature_toggle_manager import get_feature_toggle_manager
 from qradar_mcp.utils.redaction import sanitize_for_logging
 from qradar_mcp.client.qradar_rest_client import QRadarRestClient
-from qradar_mcp.tools.compatibility import gate_tool_call
+from qradar_mcp.tools.compatibility import gate_tool_call, get_fail_mode
 
 
 class MCPTool(ABC):
@@ -275,7 +275,14 @@ class MCPTool(ABC):
             )
 
             # Return error response
-            return self.create_error_response(error_msg)
+            error_response = self.create_error_response(error_msg)
+            AuditLogger.log_tool_execution(
+                tool_name=self.name,
+                arguments=arguments,
+                result=error_response,
+                duration_seconds=duration
+            )
+            return error_response
 
         except (ValueError, KeyError, TypeError, RuntimeError) as e:
             # Calculate execution time
@@ -308,7 +315,7 @@ class MCPTool(ABC):
 
         Returns a user-facing message if the tool is unsupported on the deployment,
         or None if the call may proceed (ungated tool, gate disabled, or fail-open).
-        Any unexpected error is swallowed so gating can never break a tool call.
+        In fail-closed mode, unexpected gate errors block the call.
         """
         try:
             # Allow disabling the gate entirely via feature toggles.
@@ -320,6 +327,18 @@ class MCPTool(ABC):
 
             return await gate_tool_call(self)
         except Exception as exc:  # pylint: disable=broad-exception-caught
+            if get_fail_mode() == "closed":
+                log_structured(
+                    f"Compatibility gate check failed; blocking call: {self.name}",
+                    level='ERROR',
+                    tool_name=self.name,
+                    error=str(exc),
+                    fail_mode="closed"
+                )
+                return (
+                    f"Tool '{self.name}' cannot run because the compatibility "
+                    "gate failed and compatibility fail mode is closed."
+                )
             log_structured(
                 f"Compatibility gate check failed; allowing call: {self.name}",
                 level='WARNING',

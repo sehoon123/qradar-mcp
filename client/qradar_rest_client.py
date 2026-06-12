@@ -306,6 +306,7 @@ class QRadarRestClient():  # pylint: disable=too-many-instance-attributes
         over sec_token to simulate service authentication.
         """
         headers = dict(headers or {})
+        headers.setdefault('Accept', 'application/json')
 
         api_version = version or self._api_version
         if api_version:

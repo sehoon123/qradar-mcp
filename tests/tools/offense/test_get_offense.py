@@ -54,7 +54,7 @@ class TestGetOffenseTool:
         schema = tool.input_schema
 
         offense_id_schema = schema["properties"]["offense_id"]
-        assert offense_id_schema["minimum"] == 0
+        assert offense_id_schema["minimum"] == 1
         assert "description" in offense_id_schema
 
     def test_to_mcp_tool_definition(self):
@@ -153,20 +153,16 @@ class TestGetOffenseTool:
 
     @pytest.mark.asyncio
     async def test_execute_with_zero_offense_id(self):
-        """Test executing tool with offense_id of 0."""
+        """Test executing tool with offense_id of 0 is rejected."""
         tool = GetOffenseTool()
-        mock_response = httpx.Response(
-            status_code=200,
-            json={"id": 0, "description": "Test"},
-            request=httpx.Request("GET", "http://test")
-        )
         tool.client = AsyncMock()
-        tool.client.get = AsyncMock(return_value=mock_response)
+        tool.client.get = AsyncMock()
 
         result = await tool.execute({"offense_id": 0})
 
-        tool.client.get.assert_called_once_with('/siem/offenses/0')
-        assert "isError" not in result
+        tool.client.get.assert_not_called()
+        assert result["isError"] is True
+        assert "positive integer" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
     async def test_execute_with_large_offense_id(self):

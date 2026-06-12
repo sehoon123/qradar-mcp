@@ -353,7 +353,7 @@ class TestSchemaValidation:
         offense_id_schema = schema["properties"]["offense_id"]
         assert offense_id_schema["type"] == "integer"
         assert "minimum" in offense_id_schema
-        assert offense_id_schema["minimum"] == 0
+        assert offense_id_schema["minimum"] == 1
 
     def test_string_parameter_validation(self):
         """Test string parameter schema."""

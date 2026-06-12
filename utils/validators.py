@@ -35,7 +35,7 @@ def validate_offense_id(offense_id: Any) -> bool:
     """
     try:
         id_int = int(offense_id)
-        return id_int >= 0
+        return id_int >= 1
     except (ValueError, TypeError):
         return False
 

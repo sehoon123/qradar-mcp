@@ -28,6 +28,7 @@ from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from qradar_mcp.auth_context import AuthTokenMiddleware
+from qradar_mcp.utils.mcp_access_auth import MCPAccessTokenMiddleware
 from qradar_mcp.utils.qradar_auth import QRadarAuthMiddleware
 from qradar_mcp.utils.request_context import RequestContextMiddleware
 from qradar_mcp.tools.fastmcp_adapter import register_all_tools
@@ -199,6 +200,28 @@ mcp = FastMCP("qradar-mcp", version="1.0.0")
 config = load_config()
 settings = load_settings(config)
 set_fail_mode(settings.compatibility.fail_mode)
+
+
+def enforce_mcp_exposure_policy(settings_obj):
+    """Fail fast when a remotely bound MCP server lacks its own access token."""
+    if settings_obj.server.host not in {"0.0.0.0", "::"}:
+        return
+    if settings_obj.auth.mcp_access_token:
+        return
+
+    log_structured(
+        "FATAL: MCP server remote bind requires MCP_ACCESS_TOKEN",
+        level="ERROR",
+        mcp_host=settings_obj.server.host,
+        recommendation=(
+            "Bind MCP to 127.0.0.1 or set auth.mcp_access_token / "
+            "MCP_ACCESS_TOKEN before exposing the server."
+        ),
+    )
+    sys.exit(1)
+
+
+enforce_mcp_exposure_policy(settings)
 
 # Determine verify and proxy settings
 if config:
@@ -421,6 +444,13 @@ register_resources()
 app = mcp.http_app(
     middleware=[
         (RequestContextMiddleware, [], {}),
+        (
+            MCPAccessTokenMiddleware,
+            [],
+            {
+                'access_token': settings.auth.mcp_access_token,
+            },
+        ),
         (AuthTokenMiddleware, [], {}),
         (
             QRadarAuthMiddleware,

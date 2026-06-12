@@ -68,7 +68,7 @@ class TestUpdateOffenseTool:
 
         offense_id_schema = schema["properties"]["offense_id"]
         assert offense_id_schema["type"] == "integer"
-        assert offense_id_schema["minimum"] == 0
+        assert offense_id_schema["minimum"] == 1
         assert "description" in offense_id_schema
 
     def test_input_schema_status_enum(self):

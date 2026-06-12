@@ -152,13 +152,14 @@ Recommended local authentication is an authorized service token:
   "server": {
     "host": "127.0.0.1",
     "port": 5000,
-    "debug": true
+    "debug": false
   },
   "compatibility": {
     "fail_mode": "closed"
   },
   "auth": {
-    "identity_probe": "strict"
+    "identity_probe": "strict",
+    "mcp_access_token": null
   }
 }
 ```
@@ -184,6 +185,9 @@ Notes:
 - `auth.identity_probe` defaults to `strict`. `permissive` lets a request with
   a QRadar token proceed when identity lookup endpoints are unavailable, and
   `disabled_for_local_config` skips the identity lookup for local config tokens.
+- `auth.mcp_access_token` protects the MCP endpoint itself. It is optional for
+  local `127.0.0.1` binds, but required when the server binds to `0.0.0.0` or
+  `::`.
 
 ### 5. Run the server
 
@@ -223,6 +227,9 @@ python server.py
 
 `MCP_HOST` is also supported. For local-only usage, keep it at `127.0.0.1`
 unless you intentionally need another machine to reach the server.
+If `MCP_HOST` is `0.0.0.0` or `::`, set `MCP_ACCESS_TOKEN` or
+`auth.mcp_access_token`; clients must send `Authorization: Bearer <token>` or
+`X-MCP-Token: <token>`.
 
 ### 6. Verify the local server
 
@@ -270,6 +277,14 @@ tokens directly:
 ```text
 SEC: <authorized_service_token_or_sec_token>
 QRadarCSRF: <csrf_token_for_user_session_auth>
+```
+
+If `auth.mcp_access_token` or `MCP_ACCESS_TOKEN` is configured, the MCP client
+must also send one of:
+
+```text
+Authorization: Bearer <mcp_access_token>
+X-MCP-Token: <mcp_access_token>
 ```
 
 ## Feature Toggles
@@ -320,6 +335,7 @@ config loader expects it inside the container.
 ```bash
 cp config.example.json config.json
 cp .env.example .env
+# Edit .env and set MCP_ACCESS_TOKEN to a long random value.
 docker-compose up -d
 ```
 
@@ -338,6 +354,7 @@ docker run -d \
   -p 127.0.0.1:5001:5000 \
   -e MCP_HOST=0.0.0.0 \
   -e MCP_PORT=5000 \
+  -e MCP_ACCESS_TOKEN=replace-with-long-random-token \
   -v $(pwd)/config.json:/opt/app-root/config.json:ro \
   qradar-mcp:latest
 ```

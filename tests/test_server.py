@@ -26,9 +26,11 @@ from qradar_mcp.server import (
     mcp,
     app,
     qradar_client,
+    enforce_mcp_exposure_policy,
     get_health_status,
     get_readiness_status,
 )
+from qradar_mcp.settings import load_settings
 from qradar_mcp.utils.feature_toggle_manager import FeatureToggleManager
 
 class TestMCPServerInitialization:
@@ -86,6 +88,30 @@ class TestMCPServerInitialization:
 
         assert host == "127.0.0.1"
         assert port == 5000
+
+    def test_remote_bind_requires_mcp_access_token(self):
+        """Test remotely bound MCP servers require their own access token."""
+        settings = load_settings({
+            "server": {
+                "host": "0.0.0.0"
+            }
+        })
+
+        with pytest.raises(SystemExit):
+            enforce_mcp_exposure_policy(settings)
+
+    def test_remote_bind_allows_configured_mcp_access_token(self):
+        """Test remote bind is allowed when MCP access token is configured."""
+        settings = load_settings({
+            "server": {
+                "host": "0.0.0.0"
+            },
+            "auth": {
+                "mcp_access_token": "secret"
+            }
+        })
+
+        enforce_mcp_exposure_policy(settings)
 
     @pytest.mark.asyncio
     async def test_health_routes_bypass_qradar_auth_in_asgi_stack(self, monkeypatch):

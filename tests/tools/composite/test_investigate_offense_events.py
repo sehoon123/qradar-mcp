@@ -24,6 +24,17 @@ def test_build_aql_uses_safe_defaults(tool):
     assert "LOGSOURCENAME(logsourceid) AS log_source" in query
 
 
+def test_input_schema_requires_positive_offense_id(tool):
+    """Test offense IDs are positive integers."""
+    assert tool.input_schema["properties"]["offense_id"]["minimum"] == 1
+
+
+def test_build_aql_rejects_zero_offense_id(tool):
+    """Test offense_id=0 is rejected before AQL construction."""
+    with pytest.raises(ValueError, match="offense_id must be between 1"):
+        tool._build_aql({"offense_id": 0})
+
+
 def test_build_aql_accepts_allowed_fields(tool):
     """Test explicit fields must come from the allowlist."""
     query = tool._build_aql({
@@ -74,3 +85,44 @@ async def test_validate_aql_treats_error_severity_as_invalid(tool):
 
     assert validation["valid"] is False
     assert validation["messages"][0]["severity"] == "ERROR"
+
+
+@pytest.mark.asyncio
+async def test_incomplete_search_returns_public_capability_guidance(tool):
+    """Test timeout guidance does not reference hidden default tools as required."""
+    tool.client = AsyncMock()
+    tool.client.get = AsyncMock(side_effect=[
+        httpx.Response(
+            200,
+            json={"id": 123, "status": "OPEN"},
+            request=httpx.Request("GET", "http://test/offense"),
+        ),
+        httpx.Response(
+            200,
+            json={"status": "EXECUTING"},
+            request=httpx.Request("GET", "http://test/search"),
+        ),
+    ])
+    tool.client.post = AsyncMock(side_effect=[
+        httpx.Response(
+            200,
+            json=None,
+            request=httpx.Request("POST", "http://test/validate"),
+        ),
+        httpx.Response(
+            201,
+            json={"search_id": "abc-123", "status": "EXECUTING"},
+            request=httpx.Request("POST", "http://test/searches"),
+        ),
+    ])
+
+    result = await tool.execute({
+        "offense_id": 123,
+        "max_poll_attempts": 1,
+        "poll_interval_seconds": 0,
+    })
+
+    payload = result["content"][0]["json"]
+    assert payload["search_id"] == "abc-123"
+    assert payload["recommended_next_call"]["tool"] == "investigate_offense_events"
+    assert "get_ariel_search_status/results" not in payload["warnings"][0]

@@ -43,6 +43,7 @@ class TestQRadarRestClientAddHeaders:
         headers = client._add_headers({})
 
         assert headers["SEC"] == "service_token_123"
+        assert headers["Accept"] == "application/json"
         assert "QRadarCSRF" not in headers
 
     @patch('qradar_mcp.client.qradar_rest_client.load_config')
@@ -129,6 +130,23 @@ class TestQRadarRestClientAddHeaders:
         headers = client._add_headers(existing_headers)
 
         assert headers["Custom-Header"] == "custom_value"
+        assert headers["Accept"] == "application/json"
+        assert headers["SEC"] == "test_token"
+
+    @patch('qradar_mcp.client.qradar_rest_client.load_config')
+    def test_add_headers_preserves_existing_accept_header(self, mock_load_config):
+        """Test callers can override the default Accept header."""
+        mock_load_config.return_value = {
+            "qradar": {
+                "host": "https://qradar.local",
+                "sec_token": "test_token"
+            }
+        }
+
+        client = QRadarRestClient()
+        headers = client._add_headers({"Accept": "application/xml"})
+
+        assert headers["Accept"] == "application/xml"
         assert headers["SEC"] == "test_token"
 
 

@@ -50,7 +50,7 @@ The note will be timestamped and attributed to the current user."""
         return (schema()
             .integer("offense_id")
                 .description("The ID of the offense to add the note to")
-                .minimum(0)
+                .minimum(1)
                 .required()
             .string("note_text")
                 .description("The text content of the note")

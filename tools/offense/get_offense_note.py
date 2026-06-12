@@ -28,7 +28,7 @@ class GetOffenseNoteTool(MCPTool):
         return (schema()
             .integer("offense_id")
                 .description("Offense ID")
-                .minimum(0)
+                .minimum(1)
                 .required()
             .integer("note_id")
                 .description("Offense note ID")
@@ -46,7 +46,7 @@ class GetOffenseNoteTool(MCPTool):
         offense_id = arguments.get("offense_id")
         note_id = arguments.get("note_id")
         if not validate_offense_id(offense_id):
-            return self.create_error_response("Error: offense_id must be a non-negative integer")
+            return self.create_error_response("Error: offense_id must be a positive integer")
         if note_id is None:
             return self.create_error_response("Error: note_id is required")
 

@@ -64,7 +64,7 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
         return (schema()
             .integer("offense_id")
                 .description("QRadar offense ID")
-                .minimum(0)
+                .minimum(1)
                 .required()
             .integer("time_window_minutes")
                 .description("Ariel time window in minutes (default: 360, max: 1440)")
@@ -98,10 +98,16 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
         offense_id = arguments.get("offense_id")
         if offense_id is None:
             return self.create_error_response("Error: offense_id is required")
-
-        offense = await self._get_json(f"/siem/offenses/{int(offense_id)}")
         try:
-            query_expression = self._build_aql(arguments)
+            offense_id = self._bounded_int(offense_id, "offense_id", 1, 2_147_483_647)
+        except ValueError as exc:
+            return self.create_error_response(f"Error: {exc}")
+
+        workflow_args = {**arguments, "offense_id": offense_id}
+
+        offense = await self._get_json(f"/siem/offenses/{offense_id}")
+        try:
+            query_expression = self._build_aql(workflow_args)
         except ValueError as exc:
             return self.create_error_response(f"Error: {exc}")
 
@@ -139,7 +145,11 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
             )
             results = await self._get_results(search_id, max_events)
         else:
-            warnings.append("Search did not complete within polling limits; use get_ariel_search_status/results later.")
+            warnings.append(
+                "Search did not complete within polling limits. Re-run "
+                "investigate_offense_events with higher polling bounds, or use "
+                "an operator profile that exposes Ariel job status/result tools."
+            )
 
         return self.create_json_response({
             "offense_id": offense_id,
@@ -151,10 +161,12 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
             "final_status": status,
             "metadata": metadata,
             "results": results,
+            "recommended_next_call": self._recommended_next_call(workflow_args, search_id, status, metadata),
             "warnings": warnings,
         })
 
     def _build_aql(self, arguments: Dict[str, Any]) -> str:
+        offense_id = self._bounded_int(arguments.get("offense_id"), "offense_id", 1, 2_147_483_647)
         select_fields = self._normalize_select_fields(arguments.get("fields"))
         max_events = self._bounded_int(
             arguments.get("max_events", DEFAULT_MAX_EVENTS),
@@ -170,7 +182,7 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
         )
         return (
             f"SELECT {select_fields} FROM events "
-            f"WHERE INOFFENSE({int(arguments['offense_id'])}) "
+            f"WHERE INOFFENSE({offense_id}) "
             f"ORDER BY starttime DESC LIMIT {max_events} LAST {time_window} MINUTES"
         )
 
@@ -236,3 +248,36 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
             if search.get(key):
                 return str(search[key])
         return None
+
+    @staticmethod
+    def _recommended_next_call(arguments: Dict[str, Any], search_id: str, status: Dict[str, Any],
+                               metadata: Any) -> Dict[str, Any] | None:
+        """Return public-capability-compatible guidance for incomplete searches."""
+        if str(status.get("status", "")).upper() == "COMPLETED":
+            return None
+
+        return {
+            "tool": "investigate_offense_events",
+            "reason": "rerun_workflow_with_longer_polling_bounds",
+            "search_id": search_id,
+            "current_status": status.get("status", "UNKNOWN"),
+            "arguments": {
+                "offense_id": arguments["offense_id"],
+                "time_window_minutes": arguments.get(
+                    "time_window_minutes",
+                    DEFAULT_TIME_WINDOW_MINUTES,
+                ),
+                "max_events": arguments.get("max_events", DEFAULT_MAX_EVENTS),
+                "fields": arguments.get("fields"),
+                "max_poll_attempts": min(
+                    max(int(arguments.get("max_poll_attempts", 3)) * 2, 6),
+                    20,
+                ),
+                "poll_interval_seconds": arguments.get("poll_interval_seconds", 1),
+            },
+            "operator_profile_note": (
+                "Ariel job status/result tools can inspect this search_id when "
+                "an operator profile exposes them."
+            ),
+            "metadata_available": metadata is not None,
+        }

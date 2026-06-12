@@ -51,7 +51,7 @@ Returns an array of Note objects with id, create_time, username, and note_text."
         return (schema()
             .integer("offense_id")
                 .description("The ID of the offense to retrieve notes for")
-                .minimum(0)
+                .minimum(1)
                 .required()
             .string("filter")
                 .description("Optional AQL filter to restrict notes (e.g., 'username=\"admin\"')")
@@ -90,7 +90,7 @@ Returns an array of Note objects with id, create_time, username, and note_text."
 
         if not validate_offense_id(offense_id):
             return self.create_error_response(
-                f"Error: Invalid offense_id '{offense_id}'. Must be a non-negative integer"
+                f"Error: Invalid offense_id '{offense_id}'. Must be a positive integer"
             )
 
         # Build query parameters

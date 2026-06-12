@@ -17,7 +17,11 @@
 Unit tests for the base MCPTool class.
 """
 
+from unittest.mock import Mock, patch
+
+import httpx
 import pytest
+import qradar_mcp.tools.compatibility as compat
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.utils.feature_toggle_manager import set_feature_toggle_manager
 
@@ -27,9 +31,11 @@ def reset_feature_toggles():
     """Reset feature toggle manager before each test to ensure test isolation."""
     # Clear the global feature toggle manager before each test
     set_feature_toggle_manager(None)
+    compat.set_fail_mode("open")
     yield
     # Clean up after test
     set_feature_toggle_manager(None)
+    compat.set_fail_mode("open")
 
 
 class ConcreteTool(MCPTool):
@@ -143,6 +149,43 @@ class TestMCPTool:
         assert "content" in result
         assert result["content"][0]["text"] == "param1 is required"
         assert result["isError"] is True
+
+    @pytest.mark.asyncio
+    async def test_http_status_error_is_audited(self):
+        """Test QRadar HTTP failures are recorded in audit logs."""
+        class HTTPFailingTool(ConcreteTool):
+            async def _execute_impl(self, _arguments):
+                request = httpx.Request("GET", "https://qradar.local/api/siem/offenses")
+                response = httpx.Response(403, request=request, json={"message": "denied"})
+                raise httpx.HTTPStatusError("403 Forbidden", request=request, response=response)
+
+        tool = HTTPFailingTool()
+
+        with patch('qradar_mcp.tools.base.AuditLogger.log_tool_execution') as mock_audit:
+            result = await tool.execute({"param1": "value"})
+
+        assert result["isError"] is True
+        mock_audit.assert_called_once()
+        assert mock_audit.call_args.kwargs["result"]["isError"] is True
+
+    @pytest.mark.asyncio
+    async def test_compatibility_exception_blocks_when_fail_closed(self, monkeypatch):
+        """Test wrapper-level gate failures do not fail open in closed mode."""
+        tool = ConcreteTool()
+        manager = Mock()
+        manager.compatibility_gate_enabled = True
+        set_feature_toggle_manager(manager)
+        compat.set_fail_mode("closed")
+
+        async def raise_gate_error(_tool):
+            raise RuntimeError("catalog exploded")
+
+        monkeypatch.setattr("qradar_mcp.tools.base.gate_tool_call", raise_gate_error)
+
+        message = await tool._check_compatibility()
+
+        assert message is not None
+        assert "fail mode is closed" in message
 
 
 class MinimalTool(MCPTool):

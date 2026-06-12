@@ -53,7 +53,7 @@ class ServerSettings(BaseModel):
 
     host: str = "127.0.0.1"
     port: int = 5000
-    debug: bool = True
+    debug: bool = False
 
     @field_validator("port", mode="before")
     @classmethod
@@ -89,6 +89,7 @@ class AuthSettings(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     identity_probe: Literal["strict", "permissive", "disabled_for_local_config"] = "strict"
+    mcp_access_token: Optional[str] = None
 
 
 class AppSettings(BaseModel):
@@ -170,6 +171,10 @@ def load_settings(config_data: Optional[dict] = None) -> AppSettings:  # pylint:
         normalized = auth_identity_probe.strip().lower()
         if normalized in {"strict", "permissive", "disabled_for_local_config"}:
             settings.auth.identity_probe = normalized
+
+    mcp_access_token = os.getenv("MCP_ACCESS_TOKEN")
+    if mcp_access_token is not None:
+        settings.auth.mcp_access_token = mcp_access_token.strip() or None
 
     mcp_host = os.getenv("MCP_HOST")
     if mcp_host:

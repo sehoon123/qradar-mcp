@@ -23,6 +23,7 @@ from typing import Dict, Any
 import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
+from qradar_mcp.utils.validators import validate_offense_id
 
 
 class GetOffenseTool(MCPTool):
@@ -41,7 +42,7 @@ class GetOffenseTool(MCPTool):
         return (schema()
             .integer("offense_id")
                 .description("The ID of the offense to retrieve")
-                .minimum(0)
+                .minimum(1)
                 .required()
             .build())
 
@@ -63,6 +64,8 @@ class GetOffenseTool(MCPTool):
 
         if offense_id is None:
             return self.create_error_response("Error: offense_id is required")
+        if not validate_offense_id(offense_id):
+            return self.create_error_response("Error: offense_id must be a positive integer")
 
         response = await self.client.get(f'/siem/offenses/{int(offense_id)}')
         response.raise_for_status()

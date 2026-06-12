@@ -51,7 +51,7 @@ Note: When closing an offense (status="CLOSED"), you must provide a valid closin
         return (schema()
             .integer("offense_id")
                 .description("The ID of the offense to update")
-                .minimum(0)
+                .minimum(1)
                 .required()
             .string("status")
                 .description("New status: OPEN, HIDDEN, or CLOSED. When CLOSED, closing_reason_id is required")
