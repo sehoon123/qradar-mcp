@@ -107,20 +107,24 @@ class TestMCPServerInitialization:
                 "host": "0.0.0.0"
             },
             "auth": {
-                "mcp_access_token": "a" * 32
+                "mcp_access_token": "0123456789abcdef0123456789abcdef"
             }
         })
 
         enforce_mcp_exposure_policy(settings)
 
-    def test_remote_bind_rejects_weak_mcp_access_token(self):
-        """Test weak MCP access tokens do not satisfy remote bind policy."""
+    @pytest.mark.parametrize("token", [
+        "secret",
+        "a" * 32,
+    ])
+    def test_remote_bind_rejects_weak_mcp_access_token(self, token):
+        """Test weak and low-diversity tokens do not satisfy remote bind policy."""
         settings = load_settings({
             "server": {
                 "host": "0.0.0.0"
             },
             "auth": {
-                "mcp_access_token": "secret"
+                "mcp_access_token": token
             }
         })
 

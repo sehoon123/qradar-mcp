@@ -215,6 +215,8 @@ def validate_mcp_access_token_strength(token: str) -> None:
     }
     if len(normalized) < 32:
         raise ValueError("MCP access token must be at least 32 characters")
+    if len(set(normalized)) < 8:
+        raise ValueError("MCP access token has too little character diversity")
     if normalized.lower() in weak_values:
         raise ValueError("MCP access token uses a known weak placeholder")
 

@@ -128,15 +128,8 @@ def load_raw_config(config_path: Path = DEFAULT_CONFIG_PATH) -> Optional[dict]:
         return json.load(f)
 
 
-def load_settings(config_data: Optional[dict] = None) -> AppSettings:  # pylint: disable=too-many-branches
-    """
-    Normalize config data into typed settings and apply supported env overrides.
-
-    Env overrides are intentionally limited to deployment/runtime knobs that are
-    already documented or security-sensitive.
-    """
-    settings = AppSettings.model_validate(config_data or {})
-
+def _apply_qradar_env_overrides(settings: AppSettings) -> None:
+    """Apply QRadar connection environment overrides."""
     qradar_host = os.getenv("QRADAR_HOST")
     if qradar_host:
         settings.qradar.host = qradar_host
@@ -160,6 +153,9 @@ def load_settings(config_data: Optional[dict] = None) -> AppSettings:  # pylint:
     if qradar_rest_proxy:
         settings.qradar.proxy = qradar_rest_proxy
 
+
+def _apply_policy_env_overrides(settings: AppSettings) -> None:
+    """Apply compatibility and auth policy environment overrides."""
     compatibility_fail_mode = os.getenv("QRADAR_COMPATIBILITY_FAIL_MODE")
     if compatibility_fail_mode:
         normalized = compatibility_fail_mode.strip().lower()
@@ -176,6 +172,9 @@ def load_settings(config_data: Optional[dict] = None) -> AppSettings:  # pylint:
     if mcp_access_token is not None:
         settings.auth.mcp_access_token = mcp_access_token.strip() or None
 
+
+def _apply_server_env_overrides(settings: AppSettings) -> None:
+    """Apply MCP server environment overrides."""
     mcp_host = os.getenv("MCP_HOST")
     if mcp_host:
         settings.server.host = mcp_host
@@ -188,6 +187,9 @@ def load_settings(config_data: Optional[dict] = None) -> AppSettings:  # pylint:
             # server.py logs and falls back for invalid ports.
             pass
 
+
+def _apply_httpx_env_overrides(settings: AppSettings) -> None:
+    """Apply HTTP client environment overrides."""
     httpx_max_keepalive = os.getenv("MCP_HTTPX_MAX_KEEPALIVE_CONNECTIONS")
     if httpx_max_keepalive:
         settings.httpx.max_keepalive_connections = int(httpx_max_keepalive)
@@ -200,4 +202,17 @@ def load_settings(config_data: Optional[dict] = None) -> AppSettings:  # pylint:
     if httpx_timeout:
         settings.httpx.timeout = float(httpx_timeout)
 
+
+def load_settings(config_data: Optional[dict] = None) -> AppSettings:
+    """
+    Normalize config data into typed settings and apply supported env overrides.
+
+    Env overrides are intentionally limited to deployment/runtime knobs that are
+    already documented or security-sensitive.
+    """
+    settings = AppSettings.model_validate(config_data or {})
+    _apply_qradar_env_overrides(settings)
+    _apply_policy_env_overrides(settings)
+    _apply_server_env_overrides(settings)
+    _apply_httpx_env_overrides(settings)
     return settings

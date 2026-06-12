@@ -124,32 +124,8 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
         if not search_id:
             return self.create_error_response(f"Error: Ariel search response did not include a search ID: {search}")
 
-        status = search
-        for attempt in range(int(arguments.get("max_poll_attempts", 3))):
-            if attempt > 0:
-                await asyncio.sleep(int(arguments.get("poll_interval_seconds", 1)))
-            status = await self._get_json(f"/ariel/searches/{search_id}")
-            if str(status.get("status", "")).upper() in {"COMPLETED", "ERROR", "CANCELED"}:
-                break
-
-        metadata = None
-        results = None
-        warnings = []
-        if str(status.get("status", "")).upper() == "COMPLETED":
-            metadata = await self._get_json(f"/ariel/searches/{search_id}/metadata")
-            max_events = self._bounded_int(
-                arguments.get("max_events", DEFAULT_MAX_EVENTS),
-                "max_events",
-                1,
-                MAX_EVENTS,
-            )
-            results = await self._get_results(search_id, max_events)
-        else:
-            warnings.append(
-                "Search did not complete within polling limits. Re-run "
-                "investigate_offense_events with higher polling bounds, or use "
-                "an operator profile that exposes Ariel job status/result tools."
-            )
+        status = await self._poll_search_status(search_id, arguments)
+        output = await self._collect_search_output(search_id, status, arguments)
 
         return self.create_json_response({
             "offense_id": offense_id,
@@ -159,11 +135,57 @@ rows. It does not mutate QRadar data, but it does create a transient search job.
             "search_id": search_id,
             "search": search,
             "final_status": status,
-            "metadata": metadata,
-            "results": results,
-            "recommended_next_call": self._recommended_next_call(workflow_args, search_id, status, metadata),
-            "warnings": warnings,
+            "metadata": output["metadata"],
+            "results": output["results"],
+            "recommended_next_call": self._recommended_next_call(
+                workflow_args,
+                search_id,
+                status,
+                output["metadata"],
+            ),
+            "warnings": output["warnings"],
         })
+
+    async def _poll_search_status(self, search_id: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Poll an Ariel search until a terminal state or the configured bound."""
+        status: Dict[str, Any] = {}
+        for attempt in range(int(arguments.get("max_poll_attempts", 3))):
+            if attempt > 0:
+                await asyncio.sleep(int(arguments.get("poll_interval_seconds", 1)))
+            status = await self._get_json(f"/ariel/searches/{search_id}")
+            if str(status.get("status", "")).upper() in {"COMPLETED", "ERROR", "CANCELED"}:
+                break
+        return status
+
+    async def _collect_search_output(
+        self,
+        search_id: str,
+        status: Dict[str, Any],
+        arguments: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Fetch metadata/results for completed searches and warnings otherwise."""
+        if str(status.get("status", "")).upper() != "COMPLETED":
+            return {
+                "metadata": None,
+                "results": None,
+                "warnings": [
+                    "Search did not complete within polling limits. Re-run "
+                    "investigate_offense_events with higher polling bounds, or use "
+                    "an operator profile that exposes Ariel job status/result tools."
+                ],
+            }
+
+        max_events = self._bounded_int(
+            arguments.get("max_events", DEFAULT_MAX_EVENTS),
+            "max_events",
+            1,
+            MAX_EVENTS,
+        )
+        return {
+            "metadata": await self._get_json(f"/ariel/searches/{search_id}/metadata"),
+            "results": await self._get_results(search_id, max_events),
+            "warnings": [],
+        }
 
     def _build_aql(self, arguments: Dict[str, Any]) -> str:
         offense_id = self._bounded_int(arguments.get("offense_id"), "offense_id", 1, 2_147_483_647)
