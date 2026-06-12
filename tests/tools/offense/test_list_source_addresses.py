@@ -145,7 +145,7 @@ class TestListSourceAddressesToolExecution:
         # Verify client was called with correct params
         tool.client.get.assert_called_once_with(
             '/siem/source_addresses',
-            params={"filter": "magnitude>4"}
+            params={"filter": "magnitude%3E4"}
         )
 
     @pytest.mark.asyncio
@@ -197,7 +197,7 @@ class TestListSourceAddressesToolExecution:
         tool.client.get.assert_called_once_with(
             '/siem/source_addresses',
             params={
-                "filter": "magnitude>3",
+                "filter": "magnitude%3E3",
                 "fields": "id,source_ip,magnitude,offense_ids"
             }
         )

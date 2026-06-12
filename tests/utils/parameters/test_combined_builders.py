@@ -35,8 +35,8 @@ class TestBuildQueryParams:
             fields=["id", "description"]
         )
         assert result == {
-            "filter": "status='OPEN'",
-            "sort": "+severity",
+            "filter": "status%3D%27OPEN%27",
+            "sort": "%2Bseverity",
             "fields": "id,description"
         }
 

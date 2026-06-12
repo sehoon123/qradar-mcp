@@ -22,7 +22,7 @@ from typing import Dict, Any
 import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
-from qradar_mcp.utils.parameters import build_range_header, parse_range_from_limit_offset
+from qradar_mcp.utils.parameters import build_query_params, build_range_header, parse_range_from_limit_offset
 
 
 class ListAssetPropertiesTool(MCPTool):
@@ -81,13 +81,11 @@ Note: Custom properties are organization-specific."""
         """
 
         # Build query parameters
-        params = {}
-
-        if arguments.get("filter"):
-            params["filter"] = arguments["filter"]
-
-        if arguments.get("fields"):
-            params["fields"] = arguments["fields"]
+        fields = arguments.get("fields")
+        params = build_query_params(
+            filter_expr=arguments.get("filter"),
+            fields=[field.strip() for field in fields.split(",")] if fields else None,
+        )
 
         # Build headers with Range if limit/offset provided
         limit = arguments.get("limit")

@@ -19,7 +19,7 @@ import json
 
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
-from qradar_mcp.utils.parameters import build_headers
+from qradar_mcp.utils.parameters import build_headers, build_query_params
 
 
 class ListArielDatabasesTool(MCPTool):
@@ -57,9 +57,7 @@ available on the target QRadar deployment."""
         return "GET"
 
     async def _execute_impl(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        params = {}
-        if arguments.get("filter"):
-            params["filter"] = arguments["filter"]
+        params = build_query_params(filter_expr=arguments.get("filter"))
 
         limit = arguments.get("limit", 50)
         offset = arguments.get("offset", 0)

@@ -29,7 +29,7 @@ def test_load_settings_secure_defaults():
     assert settings.server.host == "127.0.0.1"
     assert settings.server.port == 5000
     assert settings.server.debug is False
-    assert settings.compatibility.fail_mode == "open"
+    assert settings.compatibility.fail_mode == "closed"
     assert settings.auth.identity_probe == "strict"
     assert settings.auth.mcp_access_token is None
 

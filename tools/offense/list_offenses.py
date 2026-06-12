@@ -151,9 +151,14 @@ Examples:
     def _extract_total_count(self, response) -> Optional[int]:
         """Extract total count from Content-Range header."""
         content_range = response.headers.get('Content-Range')
-        if content_range:
-            return int(content_range.split('/')[-1])
-        return None
+        if not content_range or "/" not in content_range:
+            return None
+
+        total = content_range.rsplit("/", 1)[-1].strip()
+        if total == "*" or not total.isdigit():
+            return None
+
+        return int(total)
 
     def _format_response(self, offenses: List[Dict[str, Any]],
                         total_count: Optional[int], format_output: bool) -> Dict[str, Any]:
@@ -167,6 +172,6 @@ Examples:
             "offenses": offenses,
             "count": len(offenses)
         }
-        if total_count:
+        if total_count is not None:
             result["total_count"] = total_count
         return self.create_json_response(result)

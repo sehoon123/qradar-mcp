@@ -202,11 +202,39 @@ settings = load_settings(config)
 set_fail_mode(settings.compatibility.fail_mode)
 
 
+def validate_mcp_access_token_strength(token: str) -> None:
+    """Reject weak MCP access tokens for remotely bound servers."""
+    normalized = str(token or "").strip()
+    weak_values = {
+        "secret",
+        "password",
+        "changeme",
+        "change-me",
+        "replace-with-long-random-token",
+        "test",
+    }
+    if len(normalized) < 32:
+        raise ValueError("MCP access token must be at least 32 characters")
+    if normalized.lower() in weak_values:
+        raise ValueError("MCP access token uses a known weak placeholder")
+
+
 def enforce_mcp_exposure_policy(settings_obj):
     """Fail fast when a remotely bound MCP server lacks its own access token."""
     if settings_obj.server.host not in {"0.0.0.0", "::"}:
         return
     if settings_obj.auth.mcp_access_token:
+        try:
+            validate_mcp_access_token_strength(settings_obj.auth.mcp_access_token)
+        except ValueError as exc:
+            log_structured(
+                "FATAL: MCP server remote bind has a weak MCP access token",
+                level="ERROR",
+                mcp_host=settings_obj.server.host,
+                error=str(exc),
+                recommendation="Use a long random MCP_ACCESS_TOKEN before exposing the server.",
+            )
+            sys.exit(1)
         return
 
     log_structured(

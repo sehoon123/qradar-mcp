@@ -17,6 +17,8 @@
 Tests for basic parameter builder functions.
 """
 
+import httpx
+
 from qradar_mcp.utils.parameters import (
     build_filter_param,
     build_sort_param,
@@ -31,7 +33,14 @@ class TestBuildFilterParam:
     def test_with_filter(self):
         """Test building filter parameter with expression."""
         result = build_filter_param("status='OPEN'")
-        assert result == {"filter": "status='OPEN'"}
+        assert result == {"filter": "status%3D%27OPEN%27"}
+
+    def test_filter_is_double_encoded_by_httpx_params(self):
+        """Test pre-encoded filter becomes double encoded on the wire."""
+        params = build_filter_param("status='OPEN' and severity > 7")
+        request = httpx.Request("GET", "https://qradar.local/api/siem/offenses", params=params)
+
+        assert "filter=status%253D%2527OPEN%2527%2520and%2520severity%2520%253E%25207" in str(request.url)
 
     def test_without_filter(self):
         """Test building filter parameter without expression."""
@@ -50,12 +59,12 @@ class TestBuildSortParam:
     def test_single_field(self):
         """Test sorting by single field."""
         result = build_sort_param(["+severity"])
-        assert result == {"sort": "+severity"}
+        assert result == {"sort": "%2Bseverity"}
 
     def test_multiple_fields(self):
         """Test sorting by multiple fields."""
         result = build_sort_param(["+severity", "-start_time"])
-        assert result == {"sort": "+severity,-start_time"}
+        assert result == {"sort": "%2Bseverity%2C-start_time"}
 
     def test_no_fields(self):
         """Test with no sort fields."""

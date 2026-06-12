@@ -149,7 +149,7 @@ class TestExecution:
 
         # Verify filter was passed
         call_args = tool.client.get.call_args
-        assert call_args[1]["params"]["filter"] == "name LIKE '%Block%'"
+        assert call_args[1]["params"]["filter"] == "name%20LIKE%20%27%25Block%25%27"
 
     @pytest.mark.asyncio
     async def test_execution_with_fields(self, tool, mock_custom_actions):

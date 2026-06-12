@@ -100,16 +100,13 @@ is enforced based on caller's capabilities (ADMIN, SAASADMIN, or regular user)."
         fields = arguments.get("fields")
         params = build_query_params(
             fields=fields.split(",") if fields else None,
-            filter_expr=arguments.get("filter")
+            filter_expr=arguments.get("filter"),
+            sort_fields=[arguments.get("sort")] if arguments.get("sort") else None,
         )
 
         # Add current_user parameter if specified
         if arguments.get("current_user") is not None:
             params["current_user"] = str(arguments.get("current_user")).lower()
-
-        # Add sort parameter if specified
-        if arguments.get("sort"):
-            params["sort"] = arguments.get("sort")
 
         # Build headers with Range for pagination
         headers = {}

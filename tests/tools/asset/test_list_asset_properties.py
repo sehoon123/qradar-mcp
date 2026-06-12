@@ -135,7 +135,7 @@ class TestListAssetPropertiesToolExecution:
         # Verify client was called with correct params
         tool.client.get.assert_called_once_with(
             '/asset_model/properties',
-            params={"filter": "name='Location'"},
+            params={"filter": "name%3D%27Location%27"},
             headers={}
         )
 
@@ -206,7 +206,7 @@ class TestListAssetPropertiesToolExecution:
 
         # Verify client was called with all params (no sort)
         call_args = tool.client.get.call_args
-        assert call_args[1]['params']['filter'] == "type='String'"
+        assert call_args[1]['params']['filter'] == "type%3D%27String%27"
         assert call_args[1]['params']['fields'] == "id,name,type"
         assert call_args[1]['headers']['Range'] == "items=0-4"
 

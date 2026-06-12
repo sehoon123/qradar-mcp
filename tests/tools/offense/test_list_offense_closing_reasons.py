@@ -182,7 +182,7 @@ class TestListOffenseClosingReasonsToolExecution:
         # Verify client was called with correct params
         tool.client.get.assert_called_once_with(
             '/siem/offense_closing_reasons',
-            params={"filter": "text='False-Positive, Tuned'"}
+            params={"filter": "text%3D%27False-Positive%2C%20Tuned%27"}
         )
 
     @pytest.mark.asyncio
@@ -238,7 +238,7 @@ class TestListOffenseClosingReasonsToolExecution:
             params={
                 "include_reserved": "true",
                 "include_deleted": "true",
-                "filter": "is_reserved=false",
+                "filter": "is_reserved%3Dfalse",
                 "fields": "id,text,is_reserved"
             }
         )

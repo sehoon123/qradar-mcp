@@ -179,9 +179,9 @@ Notes:
 - `verify_ssl` defaults to `true`. Set it to `false` only for lab or
   self-signed certificate environments.
 - User session auth is also supported with `sec_token` and `csrf_token`.
-- `compatibility.fail_mode` defaults to `open` in code for lab friendliness, but
-  the example config uses `closed` so `/help/versions` and `/help/endpoints`
-  must be available before gated tools run.
+- `compatibility.fail_mode` defaults to `closed`, so `/help/versions` and
+  `/help/endpoints` must be available before gated tools run. Set
+  `QRADAR_COMPATIBILITY_FAIL_MODE=open` only for lab troubleshooting.
 - `auth.identity_probe` defaults to `strict`. `permissive` lets a request with
   a QRadar token proceed when identity lookup endpoints are unavailable, and
   `disabled_for_local_config` skips the identity lookup for local config tokens.
@@ -335,7 +335,7 @@ config loader expects it inside the container.
 ```bash
 cp config.example.json config.json
 cp .env.example .env
-# Edit .env and set MCP_ACCESS_TOKEN to a long random value.
+# Edit .env and set MCP_ACCESS_TOKEN to a long random value of at least 32 characters.
 docker-compose up -d
 ```
 
@@ -354,7 +354,7 @@ docker run -d \
   -p 127.0.0.1:5001:5000 \
   -e MCP_HOST=0.0.0.0 \
   -e MCP_PORT=5000 \
-  -e MCP_ACCESS_TOKEN=replace-with-long-random-token \
+  -e MCP_ACCESS_TOKEN="$(openssl rand -hex 32)" \
   -v $(pwd)/config.json:/opt/app-root/config.json:ro \
   qradar-mcp:latest
 ```

@@ -139,7 +139,7 @@ class TestExecution:
 
         # Verify filter was passed
         call_args = tool.client.get.call_args
-        assert call_args[1]["params"]["filter"] == "is_shared=true"
+        assert call_args[1]["params"]["filter"] == "is_shared%3Dtrue"
 
     @pytest.mark.asyncio
     async def test_execution_with_fields(self, tool, mock_saved_searches):

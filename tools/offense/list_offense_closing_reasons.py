@@ -23,6 +23,7 @@ from typing import Dict, Any
 import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
+from qradar_mcp.utils.parameters import build_query_params
 
 
 class ListOffenseClosingReasonsTool(MCPTool):
@@ -95,12 +96,12 @@ Note: Deleted and reserved closing reasons cannot be used to close offenses."""
             params["include_deleted"] = "true"
 
         # Optional filter
-        if arguments.get("filter"):
-            params["filter"] = arguments["filter"]
+        fields = arguments.get("fields")
+        params.update(build_query_params(
+            filter_expr=arguments.get("filter"),
+            fields=[field.strip() for field in fields.split(",")] if fields else None,
+        ))
 
-        # Optional field selection
-        if arguments.get("fields"):
-            params["fields"] = arguments["fields"]
 
         response = await self.client.get('/siem/offense_closing_reasons', params=params)
         response.raise_for_status()

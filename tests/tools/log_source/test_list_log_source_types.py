@@ -157,7 +157,7 @@ class TestListLogSourceTypesToolExecution:
 
         # Verify client was called with all params
         call_args = tool.client.get.call_args
-        assert call_args[1]['params']['filter'] == "custom=false"
+        assert call_args[1]['params']['filter'] == "custom%3Dfalse"
         assert call_args[1]['params']['fields'] == "id,name,custom"
         assert call_args[1]['headers']['Range'] == "items=0-9"
 

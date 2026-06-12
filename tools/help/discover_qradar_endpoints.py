@@ -18,7 +18,7 @@ from typing import Any, Dict
 
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
-from qradar_mcp.utils.parameters import build_headers
+from qradar_mcp.utils.parameters import build_headers, build_query_params
 
 
 class DiscoverQradarEndpointsTool(MCPTool):
@@ -70,12 +70,12 @@ adding new MCP tools or when checking whether a GET endpoint exists."""
         return "GET"
 
     async def _execute_impl(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        params = {}
         filter_expr = arguments.get("filter") or self._build_filter(arguments)
-        if filter_expr:
-            params["filter"] = filter_expr
-        if arguments.get("fields"):
-            params["fields"] = arguments["fields"]
+        fields = arguments.get("fields")
+        params = build_query_params(
+            filter_expr=filter_expr,
+            fields=[field.strip() for field in fields.split(",")] if fields else None,
+        )
 
         limit = arguments.get("limit", 25)
         offset = arguments.get("offset", 0)

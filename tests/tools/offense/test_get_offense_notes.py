@@ -171,7 +171,7 @@ class TestGetOffenseNotesExecution:
         assert "isError" not in result or result["isError"] is False
         tool.client.get.assert_called_once()
         call_args = tool.client.get.call_args
-        assert call_args[1]["params"]["filter"] == "username='admin'"
+        assert call_args[1]["params"]["filter"] == "username%3D%27admin%27"
 
     @pytest.mark.asyncio
     async def test_with_fields_parameter(self, tool):
@@ -277,7 +277,7 @@ class TestGetOffenseNotesExecution:
 
         assert "isError" not in result or result["isError"] is False
         call_args = tool.client.get.call_args
-        assert call_args[1]["params"]["filter"] == "username='admin'"
+        assert call_args[1]["params"]["filter"] == "username%3D%27admin%27"
         assert call_args[1]["params"]["fields"] == "id,note_text,create_time"
         assert call_args[1]["headers"]["Range"] == "items=0-9"
 
@@ -395,7 +395,7 @@ class TestGetOffenseNotesAPIInteraction:
 
         call_args = tool.client.get.call_args
         params = call_args[1]["params"]
-        assert params["filter"] == "id>5"
+        assert params["filter"] == "id%3E5"
         assert params["fields"] == "id,note_text"
 
 

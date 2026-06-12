@@ -154,7 +154,7 @@ class TestListLogSourcesExecution:
         # Verify
         assert "isError" not in result
         call_args = tool.client.get.call_args
-        assert call_args[1]['params']['filter'] == "enabled=true"
+        assert call_args[1]['params']['filter'] == "enabled%3Dtrue"
 
     @pytest.mark.asyncio
     async def test_execute_with_sort(self, sample_log_sources):

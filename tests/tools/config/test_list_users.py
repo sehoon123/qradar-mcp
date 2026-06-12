@@ -142,7 +142,7 @@ class TestListUsersExecution:
         assert result["content"][0]["type"] == "text"
         tool.client.get.assert_called_once()
         call_args = tool.client.get.call_args
-        assert call_args[1]["params"]["filter"] == "tenant_id=1"
+        assert call_args[1]["params"]["filter"] == "tenant_id%3D1"
 
     @pytest.mark.asyncio
     async def test_execution_with_sort(self, tool, mock_users):
@@ -163,7 +163,7 @@ class TestListUsersExecution:
         assert result["content"][0]["type"] == "text"
         tool.client.get.assert_called_once()
         call_args = tool.client.get.call_args
-        assert call_args[1]["params"]["sort"] == "+username"
+        assert call_args[1]["params"]["sort"] == "%2Busername"
 
     @pytest.mark.asyncio
     async def test_execution_with_pagination(self, tool, mock_users):

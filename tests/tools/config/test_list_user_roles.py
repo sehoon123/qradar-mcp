@@ -158,7 +158,7 @@ class TestListUserRolesExecution:
         assert result["content"][0]["type"] == "text"
         tool.client.get.assert_called_once()
         call_args = tool.client.get.call_args
-        assert call_args[1]["params"]["filter"] == "id=1"
+        assert call_args[1]["params"]["filter"] == "id%3D1"
 
     @pytest.mark.asyncio
     async def test_execution_with_pagination(self, tool, mock_roles):

@@ -107,11 +107,25 @@ class TestMCPServerInitialization:
                 "host": "0.0.0.0"
             },
             "auth": {
-                "mcp_access_token": "secret"
+                "mcp_access_token": "a" * 32
             }
         })
 
         enforce_mcp_exposure_policy(settings)
+
+    def test_remote_bind_rejects_weak_mcp_access_token(self):
+        """Test weak MCP access tokens do not satisfy remote bind policy."""
+        settings = load_settings({
+            "server": {
+                "host": "0.0.0.0"
+            },
+            "auth": {
+                "mcp_access_token": "secret"
+            }
+        })
+
+        with pytest.raises(SystemExit):
+            enforce_mcp_exposure_policy(settings)
 
     @pytest.mark.asyncio
     async def test_health_routes_bypass_qradar_auth_in_asgi_stack(self, monkeypatch):

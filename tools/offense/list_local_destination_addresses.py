@@ -23,6 +23,7 @@ from typing import Dict, Any
 import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
+from qradar_mcp.utils.parameters import build_query_params
 
 
 class ListLocalDestinationAddressesTool(MCPTool):
@@ -84,13 +85,11 @@ Use filtering to find specific destinations (e.g., 'magnitude > 7' or
         """
 
         # Build query parameters
-        params = {}
-
-        if arguments.get("filter"):
-            params["filter"] = arguments["filter"]
-
-        if arguments.get("fields"):
-            params["fields"] = arguments["fields"]
+        fields = arguments.get("fields")
+        params = build_query_params(
+            filter_expr=arguments.get("filter"),
+            fields=[field.strip() for field in fields.split(",")] if fields else None,
+        )
 
         response = await self.client.get('/siem/local_destination_addresses', params=params)
         response.raise_for_status()

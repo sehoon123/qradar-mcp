@@ -109,7 +109,7 @@ class TestListServersExecution:
         assert result["content"][0]["type"] == "text"
         tool.client.get.assert_called_once()
         call_args = tool.client.get.call_args
-        assert call_args[1]["params"]["filter"] == 'status="ACTIVE"'
+        assert call_args[1]["params"]["filter"] == "status%3D%22ACTIVE%22"
 
     @pytest.mark.asyncio
     async def test_execution_with_pagination(self, tool, mock_servers):

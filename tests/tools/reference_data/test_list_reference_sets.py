@@ -116,7 +116,7 @@ class TestListReferenceSetsExecution:
         assert "content" in result
         call_args = tool.client.get.call_args
         assert "filter" in call_args[1]["params"]
-        assert call_args[1]["params"]["filter"] == "element_type='IP'"
+        assert call_args[1]["params"]["filter"] == "element_type%3D%27IP%27"
 
     @pytest.mark.asyncio
     async def test_execute_with_sort(self, tool, sample_reference_sets):
@@ -233,8 +233,8 @@ class TestListReferenceSetsExecution:
         call_args = tool.client.get.call_args
 
         # Verify params
-        assert call_args[1]["params"]["filter"] == "namespace='SHARED'"
-        assert call_args[1]["params"]["sort"] == "+name"
+        assert call_args[1]["params"]["filter"] == "namespace%3D%27SHARED%27"
+        assert call_args[1]["params"]["sort"] == "%2Bname"
         assert call_args[1]["params"]["fields"] == "name,element_type"
 
         # Verify headers

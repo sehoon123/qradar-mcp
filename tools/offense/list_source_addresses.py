@@ -23,6 +23,7 @@ from typing import Dict, Any
 import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
+from qradar_mcp.utils.parameters import build_query_params
 
 
 class ListSourceAddressesTool(MCPTool):
@@ -81,13 +82,11 @@ Use filtering to find specific sources (e.g., 'magnitude > 5' or 'source_ip = \"
         """
 
         # Build query parameters
-        params = {}
-
-        if arguments.get("filter"):
-            params["filter"] = arguments["filter"]
-
-        if arguments.get("fields"):
-            params["fields"] = arguments["fields"]
+        fields = arguments.get("fields")
+        params = build_query_params(
+            filter_expr=arguments.get("filter"),
+            fields=[field.strip() for field in fields.split(",")] if fields else None,
+        )
 
         response = await self.client.get('/siem/source_addresses', params=params)
         response.raise_for_status()

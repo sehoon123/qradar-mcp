@@ -20,6 +20,18 @@ Utilities for building QRadar API parameters in the correct format.
 """
 
 from typing import Dict, List, Optional, Any, Tuple
+from urllib.parse import quote
+
+
+def encode_query_parameter(value: str) -> str:
+    """
+    Pre-encode QRadar query parameter values.
+
+    QRadar filter/sort parameters are documented as requiring double URL
+    encoding. This helper performs the first pass; httpx performs the second
+    pass when it serializes the params dictionary.
+    """
+    return quote(value, safe="")
 
 
 def build_filter_param(filter_expr: Optional[str]) -> Dict[str, str]:
@@ -34,7 +46,7 @@ def build_filter_param(filter_expr: Optional[str]) -> Dict[str, str]:
         Dictionary with filter parameter if provided, empty dict otherwise
     """
     if filter_expr:
-        return {"filter": filter_expr}
+        return {"filter": encode_query_parameter(filter_expr)}
     return {}
 
 
@@ -51,7 +63,7 @@ def build_sort_param(sort_fields: Optional[List[str]]) -> Dict[str, str]:
         Dictionary with sort parameter if provided, empty dict otherwise
     """
     if sort_fields:
-        return {"sort": ",".join(sort_fields)}
+        return {"sort": encode_query_parameter(",".join(sort_fields))}
     return {}
 
 

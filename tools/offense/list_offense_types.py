@@ -23,6 +23,7 @@ from typing import Dict, Any
 import json
 from qradar_mcp.tools.base import MCPTool
 from qradar_mcp.tools.schema import schema
+from qradar_mcp.utils.parameters import build_query_params
 
 
 class ListOffenseTypesTool(MCPTool):
@@ -80,16 +81,12 @@ Database types:
         """
 
         # Build query parameters
-        params = {}
-
-        if arguments.get("filter"):
-            params["filter"] = arguments["filter"]
-
-        if arguments.get("sort"):
-            params["sort"] = arguments["sort"]
-
-        if arguments.get("fields"):
-            params["fields"] = arguments["fields"]
+        fields = arguments.get("fields")
+        params = build_query_params(
+            filter_expr=arguments.get("filter"),
+            sort_fields=[arguments.get("sort")] if arguments.get("sort") else None,
+            fields=[field.strip() for field in fields.split(",")] if fields else None,
+        )
 
         response = await self.client.get('/siem/offense_types', params=params)
         response.raise_for_status()

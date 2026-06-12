@@ -141,7 +141,7 @@ class TestListAssetsExecution:
         # Verify
         assert "isError" not in result
         call_args = tool.client.get.call_args
-        assert call_args[1]['params']['filter'] == "risk_score_sum > 40"
+        assert call_args[1]['params']['filter'] == "risk_score_sum%20%3E%2040"
 
     @pytest.mark.asyncio
     async def test_execute_with_sort(self, sample_assets):

@@ -29,10 +29,10 @@ Design notes:
     QRadar auth token is injected per-request, so there is no authenticated
     client at import/registration time. ``gate_tool_call`` reuses the calling
     tool's ``client`` (which carries the active request's auth).
-  * Fail mode is configurable. Development/lab mode defaults to fail-open:
-    if the catalog cannot be fetched (network error, /help denied), gating is
-    skipped and the call proceeds. Production can set fail-closed to block gated
-    tools when the catalog source of truth is unavailable.
+  * Fail mode is configurable. The default is fail-closed: if the catalog cannot
+    be fetched (network error, /help denied), gated tools are blocked. Lab
+    deployments can explicitly set fail-open so calls proceed when the catalog
+    source of truth is unavailable.
   * The catalog is cached with a TTL (a process talks to a single console). A
     failed load is cached only briefly so a transient outage does not disable
     gating for the whole process life; a successful load is cached longer and is
@@ -220,7 +220,7 @@ BASELINE_API_VERSION = "24.0"
 # load is retried sooner so a transient outage does not disable gating forever.
 CATALOG_SUCCESS_TTL = 3600.0
 CATALOG_FAILURE_TTL = 60.0
-_FAIL_MODE = "open"
+_FAIL_MODE = "closed"
 
 # Page size used when paging through /help/endpoints.
 _HELP_ENDPOINTS_PAGE_SIZE = 500

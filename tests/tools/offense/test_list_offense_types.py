@@ -139,7 +139,7 @@ class TestListOffenseTypesToolExecution:
         # Verify client was called with correct params
         tool.client.get.assert_called_once_with(
             '/siem/offense_types',
-            params={"filter": "database_type='EVENTS'"}
+            params={"filter": "database_type%3D%27EVENTS%27"}
         )
 
     @pytest.mark.asyncio
@@ -164,7 +164,7 @@ class TestListOffenseTypesToolExecution:
         # Verify client was called with correct params
         tool.client.get.assert_called_once_with(
             '/siem/offense_types',
-            params={"sort": "+name"}
+            params={"sort": "%2Bname"}
         )
 
     @pytest.mark.asyncio
@@ -217,7 +217,7 @@ class TestListOffenseTypesToolExecution:
         tool.client.get.assert_called_once_with(
             '/siem/offense_types',
             params={
-                "filter": "custom=true",
+                "filter": "custom%3Dtrue",
                 "sort": "-id",
                 "fields": "id,name,custom"
             }

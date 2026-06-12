@@ -145,7 +145,7 @@ class TestListLocalDestinationAddressesToolExecution:
         # Verify client was called with correct params
         tool.client.get.assert_called_once_with(
             '/siem/local_destination_addresses',
-            params={"filter": "magnitude>5"}
+            params={"filter": "magnitude%3E5"}
         )
 
     @pytest.mark.asyncio
@@ -197,7 +197,7 @@ class TestListLocalDestinationAddressesToolExecution:
         tool.client.get.assert_called_once_with(
             '/siem/local_destination_addresses',
             params={
-                "filter": "magnitude>4",
+                "filter": "magnitude%3E4",
                 "fields": "id,local_destination_ip,magnitude,offense_ids"
             }
         )

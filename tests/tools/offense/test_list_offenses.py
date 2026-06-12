@@ -83,6 +83,34 @@ class TestListOffensesTool:
         assert "List offenses" in definition["description"]
         assert "inputSchema" in definition
 
+    def test_extract_total_count_handles_zero(self):
+        """Test Content-Range total count of zero is preserved."""
+        tool = ListOffensesTool()
+        response = httpx.Response(
+            status_code=200,
+            headers={"Content-Range": "items 0--1/0"},
+            request=httpx.Request("GET", "http://test")
+        )
+
+        assert tool._extract_total_count(response) == 0
+
+    def test_extract_total_count_ignores_wildcard_or_malformed_values(self):
+        """Test malformed Content-Range values do not raise."""
+        tool = ListOffensesTool()
+        wildcard = httpx.Response(
+            status_code=200,
+            headers={"Content-Range": "items 0-49/*"},
+            request=httpx.Request("GET", "http://test")
+        )
+        malformed = httpx.Response(
+            status_code=200,
+            headers={"Content-Range": "items 0-49/not-a-number"},
+            request=httpx.Request("GET", "http://test")
+        )
+
+        assert tool._extract_total_count(wildcard) is None
+        assert tool._extract_total_count(malformed) is None
+
 
 class TestListOffensesToolExecution:
     """Tests for ListOffensesTool execute method."""
@@ -129,6 +157,25 @@ class TestListOffensesToolExecution:
         mock_format.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_execute_includes_zero_total_count(self):
+        """Test structured response keeps total_count=0."""
+        tool = ListOffensesTool()
+        tool.client = AsyncMock()
+
+        mock_response = httpx.Response(
+            status_code=200,
+            json=[],
+            headers={"Content-Range": "items 0--1/0"},
+            request=httpx.Request("GET", "http://test")
+        )
+        tool.client.get = AsyncMock(return_value=mock_response)
+
+        result = await tool.execute({})
+
+        assert result["content"][0]["json"]["count"] == 0
+        assert result["content"][0]["json"]["total_count"] == 0
+
+    @pytest.mark.asyncio
     @patch('qradar_mcp.tools.offense.list_offenses.format_offense_list')
     async def test_execute_with_filter(self, mock_format):
         """Test executing tool with filter parameter."""
@@ -151,7 +198,7 @@ class TestListOffensesToolExecution:
         call_args = tool.client.get.call_args
         params = call_args[1]["params"]
         assert "filter" in params
-        assert params["filter"] == "status='OPEN'"
+        assert params["filter"] == "status%3D%27OPEN%27"
 
         assert "isError" not in result
 
@@ -376,7 +423,7 @@ class TestListOffensesToolExecution:
         params = call_args[1]["params"]
         headers = call_args[1]["headers"]
 
-        assert params["filter"] == "severity > 5"
+        assert params["filter"] == "severity%20%3E%205"
         assert params["sort"] == "-start_time"
         assert params["fields"] == "id,severity,description"
         assert headers["Range"] == "items=10-34"  # offset=10, limit=25

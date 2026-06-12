@@ -80,7 +80,7 @@ class CompatibilitySettings(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    fail_mode: Literal["open", "closed"] = "open"
+    fail_mode: Literal["open", "closed"] = "closed"
 
 
 class AuthSettings(BaseModel):
